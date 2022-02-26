@@ -1,0 +1,19 @@
+[package]
+name = "hcompress"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bytes = "^1.1.0"
+arbitrary = { version = "1", optional = true, features = ["derive"] }
+
+[profile.dev]
+#overflow-checks = false
+
+[profile.release]
+#overflow-checks = false
+
+[profile.test]
+#overflow-checks = false
