@@ -233,6 +233,178 @@ void test_strange_input2() {
     }
 }
 
+void test_strange_input3() {
+    int input[16] = { 2570,
+        28560,
+        -5778,
+        -28528,
+        28816,
+        28816,
+        2671,
+        -246,
+        -1,
+        -28417,
+        -5778,
+        -28528,
+        28304,
+        -28439,
+        -28528,
+        -5791 };
+    unsigned char output[200];
+    int status = 0;
+    long n_bytes = 200;
+    int res = fits_hcompress(&input, 1, 16, 0, &output, &n_bytes, &status);
+
+    printf("Bytes: %d\n", n_bytes);
+
+    for (int i=0; i<140; i++) {
+        printf("%d,", output[i]);
+    }
+}
+
+void test_strange_input4() {
+    int input[82] = {  -1,
+                -1,
+                1,
+                -256,
+                -1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                -256,
+                1,
+                -256,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                256,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                -1,
+                -1,
+                -1,
+                -1,
+                -1,
+                -1,
+                -1,
+                -1,
+                -1,
+                -1,
+                -1,
+                -1,
+                -1,
+                -1,
+                255,
+                0,
+                0,
+                0,
+                0,
+                -256,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                -256,
+                -4097,
+                -1 };
+    unsigned char output[800];
+    int status = 0;
+    long n_bytes = 800;
+    int res = fits_hcompress(&input, 1, 82, 0, &output, &n_bytes, &status);
+
+    printf("Bytes: %d\n", n_bytes);
+
+    for (int i=0; i<154; i++) {
+        printf("%d,", output[i]);
+    }
+}
+
+void test_strange_input5() {
+    int input[10] = { 61,
+        14,
+        0,
+        0,
+        0,
+        -23641,
+        -13558,
+        -28528,
+        -28526,
+        -28528 };
+    unsigned char output[200];
+    int status = 0;
+    long n_bytes = 200;
+    int res = fits_hcompress(&input, 10, 1, 0, &output, &n_bytes, &status);
+
+    printf("Bytes: %d\n", n_bytes);
+
+    for (int i=0; i<104; i++) {
+        printf("%d,", output[i]);
+    }
+}
+
+void test_strange_input6() {
+    int input[10] = { -28662,
+        -28528,
+        18761,
+        18761,
+        18761,
+        18761,
+        18761,
+        18761,
+        -28528,
+        -28528};
+    unsigned char output[200];
+    int status = 0;
+    long n_bytes = 200;
+    int res = fits_hcompress(&input, 10, 1, 0, &output, &n_bytes, &status);
+
+    printf("Bytes: %d\n", n_bytes);
+
+    for (int i=0; i<84; i++) {
+        printf("%d,", output[i]);
+    }
+}
+
+
+
 void test_qtree_onebit_edge_new() {
 /*
  * a = (9) &[37536, 37088, 224, 36864, 0, 222, 77022, 222, 0]
@@ -289,7 +461,11 @@ int main() {
     //test_output_nybble();
     //test_small_input();
     //test_strange_input();
-    test_strange_input2();
+    //test_strange_input2();
+    //test_strange_input3();
+    //test_strange_input4();
+    //test_strange_input5();
+    test_strange_input6();
    //test_qtree_onebit_edge_new();
 /*
     int idata[20] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19};

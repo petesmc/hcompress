@@ -1462,7 +1462,7 @@ unsigned char *scratch;
 /*  ############################################################################  */
 /*
  * do one quadtree expansion step on array a[(nqx+1)/2,(nqy+1)/2]
- * results put into b[nqx,nqy] (which may be the same as a)
+ * results put into b[nqx,nqy] (which may be the same as a)  a[10,0,0,0] nx=2 ny=1 b=[0,0,0,0] buffer2=-154141195  bits_to_go=1
  */
 static void
 qtree_expand(unsigned char *infile, unsigned char a[], int nx, int ny, unsigned char b[])
@@ -2286,7 +2286,7 @@ int i;
 		scratch[i] = input_nybble(infile);
 	}
 */
-        input_nnybble(infile, ((nqx+1)/2) * ((nqy+1)/2), scratch);
+    int res = input_nnybble(infile, ((nqx+1)/2) * ((nqy+1)/2), scratch);
 	
 	/*
 	 * insert in bitplane BIT of image A
@@ -2545,7 +2545,7 @@ static int input_nybble(unsigned char *infile)
 	return( (buffer2>>bits_to_go) & 15 ); 
 }
 /*  ############################################################################  */
-/* INPUT array of 4 BITS  */
+/* INPUT array of 4 BITS  */  //  n=4  array=[0,10,8,0] bits_to_go=5, buffer2=2123985925, ---->  buffer2=1946490143  bits_to_go=5  array=[2,8,10,8]
 
 static int input_nnybble(unsigned char *infile, int n, unsigned char array[])
 {

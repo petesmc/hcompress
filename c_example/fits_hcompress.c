@@ -292,7 +292,7 @@ int *tmp;
 			shuffle(&a[ny*i],nytop,1,tmp);
 		}
 		for (j = 0; j<nytop; j++) {
-			printf("j=%d\n", j);
+
 			shuffle(&a[j],nxtop,ny,tmp);
 		}
 		/*
