@@ -1,7 +1,8 @@
 [package]
 name = "hcompress"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
+repository = "https://github.com/petesmc/hcompress.git"
 description = "HCompress Library from CFITSIO"
 license = "MIT"
 
