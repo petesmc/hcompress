@@ -3,6 +3,8 @@ use std::io::{Cursor, Read};
 use bytes::Buf;
 //use bytes::{BytesMut, BufMut, Buf, Bytes};
 
+const CODE_MAGIC: [u8; 2] = [0xDD, 0x99];
+
 fn ffpmsg(_m: &str) {}
 
 /*  #########################################################################
@@ -38,7 +40,20 @@ The following modifications have been made to the original code:
 
  ############################################################################  */
 
-// static long nextchar;
+#[derive(Debug)]
+pub enum DecodeError {
+    EndOfBuffer,
+    ZeroSizeInput,
+}
+
+pub struct HCDecoder {}
+
+impl HCDecoder {
+    pub fn new() -> HCDecoder {
+        HCDecoder {}
+    }
+}
+
 #[must_use]
 pub fn min(a: i32, b: i32) -> i32 {
     if a < b {
@@ -78,7 +93,7 @@ pub fn max64(a: i64, b: i64) -> i64 {
 /* ---------------------------------------------------------------------- */
 pub fn fits_hdecompress(inputz: &[u8], smooth: i32, a: &mut [i32]) -> (i32, usize, usize, i32) {
     /*
-        decompress the input byte stream using the H-compress algorithm
+    decompress the input byte stream using the H-compress algorithm
 
       input  - input array of compressed bytes
       a - pre-allocated array to hold the output uncompressed image
@@ -881,6 +896,7 @@ pub fn undigitize(a: &mut [i32], nx: usize, ny: usize, scale: i32) {
     }
     //for (p=a; p <= &a[nx*ny-1]; p++) *p = (*p)*scale;
 }
+
 /*  ############################################################################  */
 pub fn undigitize64(a: &mut [i64], nx: usize, ny: usize, scale: i32) {
     /*
@@ -910,8 +926,6 @@ pub fn undigitize64(a: &mut [i64], nx: usize, ny: usize, scale: i32) {
  *
  * Programmer: R. White		Date: 2 February 1994
  */
-
-pub const CODE_MAGIC: [u8; 2] = [0xDD, 0x99];
 
 /*  ############################################################################  */
 pub fn decode(infile: &mut Cursor<&[u8]>, a: &mut [i32]) -> (i32, usize, usize, i32) {
