@@ -1,4 +1,4 @@
-use std::io::{BufRead, Cursor, Read};
+use std::io::{Cursor, Read};
 
 use bytes::Buf;
 //use bytes::{BytesMut, BufMut, Buf, Bytes};
@@ -2082,7 +2082,7 @@ pub fn input_nnybble(
         }
     }
 
-    let ii = (n / 2);
+    let ii = n / 2;
     if ii * 2 != n {
         /* have to read last odd byte */
         array[n - 1] = input_nybble(infile, b2) as u8;

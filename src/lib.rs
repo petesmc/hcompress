@@ -682,7 +682,7 @@ pub fn output_nbits(outfile: &mut Vec<u8>, bits: i32, n: usize, b2: &mut Buffer2
      */
     b2.buffer2 <<= n;
     //lbitbuffer |= bits & ((1<<n)-1);
-    b2.buffer2 |= (bits & mask[n as usize]);
+    b2.buffer2 |= bits & mask[n as usize];
     b2.bits_to_go2 -= n as i32;
     while b2.bits_to_go2 <= 0 {
         /*
@@ -1174,7 +1174,6 @@ pub fn write_bdirect(
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, io::Write};
 
     use super::*;
     #[test]
@@ -1460,7 +1459,7 @@ mod tests {
         let mut a: [i32; 16] = [32, 16, -2, 2, 12, 6, 0, -24, 2, 12, -1, -1, 0, 24, 4, -22];
         let mut scratch: [u8; 2] = [0; 2];
 
-        let mut output: Vec<u8> = Vec::with_capacity(16);
+        let output: Vec<u8> = Vec::with_capacity(16);
 
         qtree_onebit(&mut a, n, nx, ny, &mut scratch, bit);
 
@@ -1481,7 +1480,7 @@ mod tests {
         let mut a: [i32; 9] = [37536, 37088, 224, 36864, 0, 222, 77022, 222, 0];
         let mut scratch: [u8; 4] = [99; 4];
 
-        let mut output: Vec<u8> = Vec::with_capacity(16);
+        let output: Vec<u8> = Vec::with_capacity(16);
 
         qtree_onebit(&mut a, n, nx, ny, &mut scratch, bit);
 
@@ -1563,7 +1562,7 @@ mod tests {
             bitcount: 4,
         };
         let n = 3;
-        let mut array = [2, 8, 8, 85];
+        let array = [2, 8, 8, 85];
 
         output_nnybble(&mut outfile, n, &array, &mut b2);
 

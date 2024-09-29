@@ -1,9 +1,9 @@
 [package]
 name = "hcompress"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 repository = "https://github.com/petesmc/hcompress.git"
-description = "HCompress Library from CFITSIO"
+description = "HCompress Library"
 license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
