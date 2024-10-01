@@ -1,4 +1,4 @@
-use std::io::{Cursor, Read};
+use std::io::Cursor;
 
 use bytes::Buf;
 //use bytes::{BytesMut, BufMut, Buf, Bytes};
@@ -47,6 +47,12 @@ pub enum DecodeError {
 }
 
 pub struct HCDecoder {}
+
+impl Default for HCDecoder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl HCDecoder {
     pub fn new() -> HCDecoder {
@@ -368,7 +374,6 @@ pub fn hinv(a: &mut [i32], nx: usize, ny: usize, smooth: i32, scale: i32) -> i32
 
     0
 }
-/*  ############################################################################  */
 
 /*  ############################################################################  */
 pub fn unshuffle(a: &mut [i32], n: usize, n2: usize, tmp: &mut [i32])
@@ -379,10 +384,6 @@ int n2;		 second dimension
 int tmp[];	 scratch storage
 */
 {
-    // int i;
-    // int nhalf;
-    // int *p1, *p2, *pt;
-
     /*
      * copy 2nd half of array to tmp
      */
@@ -395,6 +396,7 @@ int tmp[];	 scratch storage
         p1 += n2;
         pt += 1;
     }
+
     /*
      * distribute 1st half of array to even elements
      */
@@ -434,6 +436,7 @@ int tmp[];	 scratch storage
         pt += 1;
     }
 }
+
 /*  ############################################################################  */
 pub fn unshuffle64(a: &mut [i64], n: usize, n2: usize, tmp: &mut [i64])
 /*
@@ -1451,19 +1454,21 @@ pub fn qtree_copy(a: &mut [u8], nx: usize, ny: usize, n: usize)
 }
 
 /*  ############################################################################  */
-/*
- * Copy 4-bit values from a[(nx+1)/2,(ny+1)/2] to b[nx,ny], expanding
- * each value to 2x2 pixels and inserting into bitplane BIT of B.
- * A,B may NOT be same array (it wouldn't make sense to be inserting
- * bits into the same array anyway.)
- */
-pub fn qtree_bitins(a: &mut [u8], nx: usize, ny: usize, b: &mut [i32], n: usize, bit: i32)
-/*
-   int n;		declared y dimension of b
-*/
-{
-    // int i, j, k;
-
+/// Copy 4-bit values from a[(nx+1)/2,(ny+1)/2] to b[nx,ny], expanding each value to 2x2 pixels and inserting into bitplane BIT of B.
+///
+/// A,B may NOT be same array (it wouldn't make sense to be inserting
+/// bits into the same array anyway.)
+///
+/// # Arguments
+///
+/// * `a` - 1-D array of 4-bit values
+/// * `nx` - x dimension of a
+/// * `ny` - y dimension of a
+/// * `b` - 1-D array of 32-bit values
+/// * `n` - y dimension of b
+/// * `bit` - bitplane to insert into
+///
+fn qtree_bitins(a: &mut [u8], nx: usize, ny: usize, b: &mut [i32], n: usize, bit: i32) {
     let mut s00: usize;
 
     let plane_val = 1 << bit;
@@ -1478,8 +1483,8 @@ pub fn qtree_bitins(a: &mut [u8], nx: usize, ny: usize, b: &mut [i32], n: usize,
     if nx == 0 {
         return;
     } // Return early and prevent underflow
+
     for i in (0..(nx - 1)).step_by(2) {
-        //for (i = 0; i<nx-1; i += 2) {
         s00 = n * i; /* s00 is index of b[i,j]	*/
 
         /* Note:
@@ -1492,9 +1497,8 @@ pub fn qtree_bitins(a: &mut [u8], nx: usize, ny: usize, b: &mut [i32], n: usize,
             // TODO
             continue;
         } // Continue early and prevent underflow
-        for _j in (0..(ny - 1)).step_by(2) {
-            //for (j = 0; j<ny-1; j += 2) {
 
+        for _j in (0..(ny - 1)).step_by(2) {
             match a[k] {
                 0 => (),
                 1 => {
@@ -1572,6 +1576,7 @@ pub fn qtree_bitins(a: &mut [u8], nx: usize, ny: usize, b: &mut [i32], n: usize,
             /*			s10 += 2; */
             k += 1;
         }
+
         if oddy > 0 {
             /*
              * row size is odd, do last element in row
@@ -1629,6 +1634,7 @@ pub fn qtree_bitins(a: &mut [u8], nx: usize, ny: usize, b: &mut [i32], n: usize,
             k += 1;
         }
     }
+
     if oddx > 0 {
         /*
          * column size is odd, do last row
@@ -1638,9 +1644,8 @@ pub fn qtree_bitins(a: &mut [u8], nx: usize, ny: usize, b: &mut [i32], n: usize,
         if ny == 0 {
             return;
         } // Return early and prevent underflow
-        for _j in (0..(ny - 1)).step_by(2) {
-            //for (j = 0; j<ny-1; j += 2) {
 
+        for _j in (0..(ny - 1)).step_by(2) {
             match a[k] {
                 4 => {
                     b[s00 + 1] |= plane_val;
@@ -1693,6 +1698,7 @@ pub fn qtree_bitins(a: &mut [u8], nx: usize, ny: usize, b: &mut [i32], n: usize,
             s00 += 2;
             k += 1;
         }
+
         if oddy > 0 {
             /*
              * both row and column size are odd, do corner element
@@ -1981,7 +1987,7 @@ pub fn input_bit(infile: &mut Cursor<&[u8]>, b2: &mut Buffer2) -> i32 {
      * Return the next bit
      */
     b2.bits_to_go -= 1;
-    ((b2.buffer2 >> b2.bits_to_go) & 1) as i32
+    (b2.buffer2 >> b2.bits_to_go) & 1
 }
 
 /*  ############################################################################  */
@@ -2007,7 +2013,7 @@ pub fn input_nbits(infile: &mut Cursor<&[u8]>, n: usize, b2: &mut Buffer2) -> i3
 
     /* there was a slight gain in speed by replacing the following line */
     /*	return( (buffer2>>bits_to_go) & ((1<<n)-1) ); */
-    (b2.buffer2 >> b2.bits_to_go) as i32 & (mask[n])
+    (b2.buffer2 >> b2.bits_to_go) & (mask[n])
 }
 /*  ############################################################################  */
 /* INPUT 4 BITS  */
@@ -2027,7 +2033,7 @@ pub fn input_nybble(infile: &mut Cursor<&[u8]>, b2: &mut Buffer2) -> i32 {
      */
     b2.bits_to_go -= 4;
 
-    ((b2.buffer2 >> b2.bits_to_go) & 15) as i32
+    (b2.buffer2 >> b2.bits_to_go) & 15
 }
 /*  ############################################################################  */
 /* INPUT array of 4 BITS  */
@@ -2102,7 +2108,7 @@ pub fn input_nnybble(
         array[n - 1] = input_nybble(infile, b2) as u8;
     }
 
-    ((b2.buffer2 >> b2.bits_to_go) & 15) as i32
+    (b2.buffer2 >> b2.bits_to_go) & 15
 }
 
 #[cfg(test)]
@@ -2360,7 +2366,7 @@ mod tests {
         let smooth = 0;
         let scale = 0;
 
-        let res = hinv(&mut a[0..], nx, ny, smooth, scale);
+        let _res = hinv(&mut a[0..], nx, ny, smooth, scale);
 
         assert_eq!(a, [2, 2, 1, 2, 3, 2, 7, 7, 4, 2, 2, 1, 2, 4, 25, 2]);
     }

@@ -1,4 +1,26 @@
+fn ffpmsg(_m: &str) {}
+
+/// Huffman code values and number of bits in each code
+const CODE: [i32; 16] = [
+    0x3e, 0x00, 0x01, 0x08, 0x02, 0x09, 0x1a, 0x1b, 0x03, 0x1c, 0x0a, 0x1d, 0x0b, 0x1e, 0x3f, 0x0c,
+];
+
+const NCODE: [i32; 16] = [6, 3, 3, 4, 3, 4, 5, 5, 3, 5, 4, 5, 4, 5, 6, 4];
+
+const CODE_MAGIC: [u8; 2] = [0xDD, 0x99];
+
+#[derive(Debug)]
+pub enum EncodeError {
+    DataCompressionError,
+}
+
 pub struct HCEncoder {}
+
+impl Default for HCEncoder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl HCEncoder {
     pub fn new() -> Self {
@@ -8,14 +30,13 @@ impl HCEncoder {
     /* ---------------------------------------------------------------------- */
     /// Compress the input image using the H-compress algorithm
     ///
-    /// a  - input image array
-    /// nx - size of X axis of image
-    /// ny - size of Y axis of image
-    /// scale - quantization scale factor. Larger values results in more (lossy) compression
-    ///         scale = 0 does lossless compression
-    /// output - pre-allocated array to hold the output compressed stream of bytes
-    /// nbyts  - input value = size of the output buffer;
-    ///             returned value = size of the compressed byte stream, in bytes
+    /// # Arguments
+    ///
+    /// * `a` - input image array
+    /// * `nx` - size of X axis of image
+    /// * `ny` - size of Y axis of image
+    /// * `scale` - quantization scale factor. Larger values results in more (lossy) compression. 0 does lossless compression
+    /// * `output` - pre-allocated array to hold the output compressed stream of bytes
     ///
     /// NOTE: the nx and ny dimensions as defined within this code are reversed from
     /// the usual FITS notation.  ny is the fastest varying dimension, which is
@@ -27,30 +48,51 @@ impl HCEncoder {
         nx: usize,
         scale: i32,
         output: &mut Vec<u8>,
-    ) -> i32 {
-        /* H-transform */
-        htrans(a, nx, ny);
+    ) -> Result<(), EncodeError> {
+        // H-transform
+        htrans(a, nx, ny)?;
 
-        /* digitize */
+        // digitize
         digitize(a, nx, ny, scale);
 
-        /* encode and write to output array */
+        // encode and write to output array
+        // input value is the allocated size of the array
+        encode_work(output, a, nx, ny, scale)
+    }
 
-        /* input value is the allocated size of the array */
-        encode_work(output, a, nx, ny, scale);
+    /* ---------------------------------------------------------------------- */
+    /// Compress the input image using the H-compress algorithm
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - input image array
+    /// * `nx` - size of X axis of image
+    /// * `ny` - size of Y axis of image
+    /// * `scale` - quantization scale factor. Larger values results in more (lossy) compression. 0 does lossless compression
+    /// * `output` - pre-allocated array to hold the output compressed stream of bytes
+    ///
+    /// NOTE: the nx and ny dimensions as defined within this code are reversed from
+    /// the usual FITS notation.  ny is the fastest varying dimension, which is
+    /// usually considered the X axis in the FITS image display
+    pub fn encode64(
+        &self,
+        a: &mut [i64],
+        ny: usize,
+        nx: usize,
+        scale: i32,
+        output: &mut Vec<u8>,
+    ) -> Result<(), EncodeError> {
+        // H-transform
+        htrans64(a, nx, ny)?;
 
-        0
+        // digitize
+        digitize64(a, nx, ny, scale);
+
+        // encode and write to output array
+        // input value is the allocated size of the array
+        encode_work64(output, a, nx, ny, scale)
     }
 }
-
-/// Huffman code values and number of bits in each code
-const CODE: [i32; 16] = [
-    0x3e, 0x00, 0x01, 0x08, 0x02, 0x09, 0x1a, 0x1b, 0x03, 0x1c, 0x0a, 0x1d, 0x0b, 0x1e, 0x3f, 0x0c,
-];
-
-const NCODE: [i32; 16] = [6, 3, 3, 4, 3, 4, 5, 5, 3, 5, 4, 5, 4, 5, 6, 4];
-
-const CODE_MAGIC: [u8; 2] = [0xDD, 0x99];
 
 /* ######################################################################### */
 /// H-transform of NX x NY integer imag
@@ -61,11 +103,7 @@ const CODE_MAGIC: [u8; 2] = [0xDD, 0x99];
 /// * `nx` - size of X axis of image
 /// * `ny` - size of Y axis of image
 ///
-/// # Returns
-///
-/// 0 if successful, -1 if not
-///
-fn htrans(a: &mut [i32], nx: usize, ny: usize) -> i32 {
+fn htrans(a: &mut [i32], nx: usize, ny: usize) -> Result<(), EncodeError> {
     let mut h0: i32;
     let mut hx: i32;
     let mut hy: i32;
@@ -87,8 +125,13 @@ fn htrans(a: &mut [i32], nx: usize, ny: usize) -> i32 {
     }
 
     // get temporary storage for shuffling elements
-
-    let mut tmp: Vec<i32> = vec![0; (nmax + 1) / 2];
+    let mut tmp: Vec<i32> = Vec::new();
+    if tmp.try_reserve_exact((nmax + 1) / 2).is_err() {
+        ffpmsg("htrans: insufficient memory");
+        return Err(EncodeError::DataCompressionError);
+    } else {
+        tmp.resize((nmax + 1) / 2, 0);
+    }
 
     // set up rounding and shifting masks
     let mut shift: i32 = 0;
@@ -111,9 +154,11 @@ fn htrans(a: &mut [i32], nx: usize, ny: usize) -> i32 {
     for _k in 0..log2n {
         oddx = nxtop % 2;
         oddy = nytop % 2;
+
         for i in (0..(nxtop - oddx)).step_by(2) {
             s00 = i * ny; // s00 is index of a[i,j]
             s10 = s00 + ny; // s10 is index of a[i+1,j]
+
             for _j in (0..(nytop - oddy)).step_by(2) {
                 // Divide h0,hx,hy,hc by 2 (1 the first time through).
                 h0 = (a[s10 + 1] + a[s10] + a[s00 + 1] + a[s00]) >> shift;
@@ -133,6 +178,7 @@ fn htrans(a: &mut [i32], nx: usize, ny: usize) -> i32 {
                 s00 += 2;
                 s10 += 2;
             }
+
             if oddy > 0 {
                 /*
                 do last element in row if row length is odd
@@ -146,6 +192,7 @@ fn htrans(a: &mut [i32], nx: usize, ny: usize) -> i32 {
                 s10 += 1;
             }
         }
+
         if oddx > 0 {
             /*
             do last row if column length is odd
@@ -193,10 +240,169 @@ fn htrans(a: &mut [i32], nx: usize, ny: usize) -> i32 {
         nrnd2 = prnd2 - 1;
     }
 
-    0
+    Ok(())
 }
 
+
+/* ######################################################################### */
+/// H-transform of NX x NY integer imag
+///
+/// # Arguments
+///
+/// * `a` - input image array
+/// * `nx` - size of X axis of image
+/// * `ny` - size of Y axis of image
+///
+fn htrans64(a: &mut [i64], nx: usize, ny: usize) -> Result<(), EncodeError> {
+    let mut h0: i64;
+    let mut hx: i64;
+    let mut hy: i64;
+    let mut hc: i64;
+
+    let mut oddx: usize;
+    let mut oddy: usize;
+
+    let mut s10: usize;
+    let mut s00: usize;
+
+    let nmax: usize = if nx > ny { nx } else { ny };
+
+    // log2n is log2 of max(nx,ny) rounded up to next power of 2
+    let mut log2n: i32 = ((nmax as f64).ln() / 2.0_f64.ln() + 0.5) as i32;
+
+    if nmax > (1 << log2n) {
+        log2n += 1;
+    }
+
+    // get temporary storage for shuffling elements
+    let mut tmp: Vec<i64> = Vec::new();
+    if tmp.try_reserve_exact((nmax + 1) / 2).is_err() {
+        ffpmsg("htrans: insufficient memory");
+        return Err(EncodeError::DataCompressionError);
+    } else {
+        tmp.resize((nmax + 1) / 2, 0);
+    }
+
+    // set up rounding and shifting masks
+    let mut shift: i32 = 0;
+    let mut mask: i64 = -2;
+    let mut mask2: i64 = mask << 1;
+    let mut prnd: i64 = 1;
+    let mut prnd2: i64 = prnd << 1;
+    let mut nrnd2: i64 = prnd2 - 1;
+
+    /*
+     do log2n reductions
+
+     We're indexing a as a 2-D array with dimensions (nx,ny).
+
+    */
+
+    let mut nxtop: usize = nx;
+    let mut nytop: usize = ny;
+
+    for _k in 0..log2n {
+        oddx = nxtop % 2;
+        oddy = nytop % 2;
+
+        for i in (0..(nxtop - oddx)).step_by(2) {
+            s00 = i * ny; // s00 is index of a[i,j]
+            s10 = s00 + ny; // s10 is index of a[i+1,j]
+
+            for _j in (0..(nytop - oddy)).step_by(2) {
+                // Divide h0,hx,hy,hc by 2 (1 the first time through).
+                h0 = (a[s10 + 1] + a[s10] + a[s00 + 1] + a[s00]) >> shift;
+                hx = (a[s10 + 1] + a[s10] - a[s00 + 1] - a[s00]) >> shift;
+                hy = (a[s10 + 1] - a[s10] + a[s00 + 1] - a[s00]) >> shift;
+                hc = (a[s10 + 1] - a[s10] - a[s00 + 1] + a[s00]) >> shift;
+
+                /*
+                Throw away the 2 bottom bits of h0, bottom bit of hx,hy.
+                To get rounding to be same for positive and negative
+                numbers, nrnd2 = prnd2 - 1.
+                 */
+                a[s10 + 1] = hc;
+                a[s10] = (if hx >= 0 { hx + prnd } else { hx }) & mask;
+                a[s00 + 1] = (if hy >= 0 { hy + prnd } else { hy }) & mask;
+                a[s00] = (if h0 >= 0 { h0 + prnd2 } else { h0 + nrnd2 }) & mask2;
+                s00 += 2;
+                s10 += 2;
+            }
+
+            if oddy > 0 {
+                /*
+                do last element in row if row length is odd
+                s00+1, s10+1 are off edge
+                 */
+                h0 = (a[s10] + a[s00]) << (1 - shift);
+                hx = (a[s10] - a[s00]) << (1 - shift);
+                a[s10] = (if hx >= 0 { hx + prnd } else { hx }) & mask;
+                a[s00] = (if h0 >= 0 { h0 + prnd2 } else { h0 + nrnd2 }) & mask2;
+                s00 += 1;
+                s10 += 1;
+            }
+        }
+
+        if oddx > 0 {
+            /*
+            do last row if column length is odd
+            s10, s10+1 are off edge
+             */
+            s00 = (nxtop - 1) * ny; // i*ny;
+            for _j in (0..(nytop - oddy)).step_by(2) {
+                h0 = (a[s00 + 1] + a[s00]) << (1 - shift);
+                hy = (a[s00 + 1] - a[s00]) << (1 - shift);
+                a[s00 + 1] = (if hy >= 0 { hy + prnd } else { hy }) & mask;
+                a[s00] = (if h0 >= 0 { h0 + prnd2 } else { h0 + nrnd2 }) & mask2;
+                s00 += 2;
+            }
+            if oddy > 0 {
+                /*
+                do corner element if both row and column lengths are odd
+                s00+1, s10, s10+1 are off edge
+                 */
+                h0 = a[s00] << (2 - shift);
+                a[s00] = (if h0 >= 0 { h0 + prnd2 } else { h0 + nrnd2 }) & mask2;
+            }
+        }
+
+        // Now shuffle in each dimension to group coefficients by order
+        for i in 0..nxtop {
+            shuffle64(&mut a[ny * i..], nytop, 1, &mut tmp);
+        }
+
+        for j in 0..nytop {
+            shuffle64(&mut a[j..], nxtop, ny, &mut tmp);
+        }
+
+        // Image size reduced by 2 (round up if odd)
+        nxtop = (nxtop + 1) >> 1;
+        nytop = (nytop + 1) >> 1;
+
+        // Divisor doubles after first reduction
+        shift = 1;
+
+        // Masks, rounding values double after each iteration
+        mask = mask2;
+        prnd = prnd2;
+        mask2 <<= 1;
+        prnd2 <<= 1;
+        nrnd2 = prnd2 - 1;
+    }
+
+    Ok(())
+}
+
+/* ######################################################################### */
 /// Round to multiple of scale
+///
+/// # Arguments
+///
+/// * `a` - Array to round
+/// * `nx` - Number of elements in column
+/// * `ny` - Number of elements in row
+/// * `scale` - Scale factor
+///
 fn digitize(a: &mut [i32], nx: usize, ny: usize, scale: i32) {
     if scale <= 1 {
         return;
@@ -218,6 +424,42 @@ fn digitize(a: &mut [i32], nx: usize, ny: usize, scale: i32) {
         }
     }
 }
+
+/* ######################################################################### */
+/// Round to multiple of scale
+///
+/// # Arguments
+///
+/// * `a` - Array to round
+/// * `nx` - Number of elements in column
+/// * `ny` - Number of elements in row
+/// * `scale` - Scale factor
+///
+fn digitize64(a: &mut [i64], nx: usize, ny: usize, scale: i32) {
+
+    if scale <= 1 {
+        return;
+    };
+
+    let scale = scale as i64;
+
+    let d: i64 = (scale + 1) / 2 - 1;
+
+    if d == 0 {
+        for p in 0..(nx * ny) {
+            a[p] /= scale;
+        }
+    } else {
+        for p in 0..(nx * ny) {
+            if a[p] > 0 {
+                a[p] = (a[p] + d) / scale;
+            } else {
+                a[p] = (a[p] - d) / scale;
+            }
+        }
+    }
+}
+
 
 /* ######################################################################### */
 /// Shuffles array by copying odd elements to tmp
@@ -257,6 +499,46 @@ fn shuffle(a: &mut [i32], n: usize, n2: usize, tmp: &mut [i32]) {
     }
 }
 
+
+/* ######################################################################### */
+/// Shuffles array by copying odd elements to tmp
+///
+/// # Arguments
+///
+/// * `a` - Array to shuffle
+/// * `n` - Number of elements to shuffle
+/// * `n2` - Second dimension
+/// * `tmp` - Scratch storage
+///
+fn shuffle64(a: &mut [i64], n: usize, n2: usize, tmp: &mut [i64]) {
+    let mut pt: usize = 0;
+    let mut p1: usize = n2;
+
+    for _i in (1..n).step_by(2) {
+        tmp[pt] = a[p1];
+        pt += 1;
+        p1 += n2 + n2;
+    }
+
+    // Compress even elements into first half of A
+    p1 = n2;
+    let mut p2: usize = n2 + n2;
+    for _i in (2..n).step_by(2) {
+        a[p1] = a[p2];
+        p1 += n2;
+        p2 += n2 + n2;
+    }
+
+    // Put odd elements into 2nd half
+    pt = 0;
+    for _i in (1..n).step_by(2) {
+        a[p1] = tmp[pt];
+        p1 += n2;
+        pt += 1;
+    }
+}
+
+
 /* ######################################################################### */
 /// Performs H-Compress encoding
 ///
@@ -268,87 +550,86 @@ fn shuffle(a: &mut [i32], n: usize, n2: usize, tmp: &mut [i32]) {
 /// * `ny` - size of H-transform array
 /// * `scale` - scale factor for digitization
 ///
-fn encode_work(outfile: &mut Vec<u8>, a: &mut [i32], nx: usize, ny: usize, scale: i32) {
+fn encode_work(
+    outfile: &mut Vec<u8>,
+    a: &mut [i32],
+    nx: usize,
+    ny: usize,
+    scale: i32,
+) -> Result<(), EncodeError> {
     let mut nbitplanes: [u8; 3] = [0; 3];
     let mut vmax: [i32; 3] = [0; 3];
 
     let nel = nx * ny;
 
-    /*
-     * write magic value
-     */
+    // write magic value
     qwrite(outfile, &CODE_MAGIC, 2);
     writeint(outfile, nx as i32); /* size of image */
     writeint(outfile, ny as i32);
     writeint(outfile, scale); /* scale factor for digitization */
 
     /*
-     * write first value of A (sum of all pixels -- the only value
-     * which does not compress well)
+    write first value of A (sum of all pixels -- the only value
+    which does not compress well)
      */
     writelonglong(outfile, i64::from(a[0]));
 
     a[0] = 0;
 
-    /*
-    * allocate array for sign bits and save values, 8 per byte
-             (initialize to all zeros)
-    */
-    let mut signbits: Vec<u8> = vec![0; (nel + 7) / 8];
+    // allocate array for sign bits and save values, 8 per byte (initialize to all zeros)
+    let mut signbits: Vec<u8> = Vec::new();
+    if signbits.try_reserve_exact((nel + 7) / 8).is_err() {
+        ffpmsg("encode: insufficient memory");
+        return Err(EncodeError::DataCompressionError);
+    } else {
+        signbits.resize((nel + 7) / 8, 0);
+    }
 
     let mut nsign = 0;
     let mut bits_to_go = 8;
 
-    /*	signbits[0] = 0; */
     for i in 0..nel {
         if a[i] > 0 {
-            /*
-             * positive element, put zero at end of buffer
-             */
+            // positive element, put zero at end of buffer
+
             signbits[nsign] <<= 1;
             bits_to_go -= 1;
         } else if a[i] < 0 {
-            /*
-             * negative element, shift in a one
-             */
+            // negative element, shift in a one
+
             signbits[nsign] <<= 1;
             signbits[nsign] |= 1;
             bits_to_go -= 1;
-            /*
-             * replace a by absolute value
-             */
+
+            //replace a by absolute value
             a[i] = -a[i];
         }
 
         if bits_to_go == 0 {
-            /*
-             * filled up this byte, go to the next one
-             */
+            // filled up this byte, go to the next one
+
             bits_to_go = 8;
             nsign += 1;
-            /*			signbits[nsign] = 0; */
         }
     }
 
     if bits_to_go != 8 {
         /*
-         * some bits in last element
-         * move bits in last byte to bottom and increment nsign
+        some bits in last element
+        move bits in last byte to bottom and increment nsign
          */
         signbits[nsign] <<= bits_to_go;
         nsign += 1;
     }
 
     /*
-     * calculate number of bit planes for 3 quadrants
-     *
-     * quadrant 0=bottom left, 1=bottom right or top left, 2=top right,
+    calculate number of bit planes for 3 quadrants
+
+    quadrant 0=bottom left, 1=bottom right or top left, 2=top right,
      */
     vmax.iter_mut().for_each(|x| *x = 0);
 
-    /*
-     * get maximum absolute value in each quadrant
-     */
+    // get maximum absolute value in each quadrant
     let nx2 = (nx + 1) / 2;
     let ny2 = (ny + 1) / 2;
     let mut j = 0; /* column counter	*/
@@ -366,11 +647,7 @@ fn encode_work(outfile: &mut Vec<u8>, a: &mut [i32], nx: usize, ny: usize, scale
         }
     }
 
-    /*
-     * now calculate number of bits for each quadrant
-     */
-
-    /* this is a more efficient way to do this, */
+    // now calculate number of bits for each quadrant
 
     for q in 0..3 {
         nbitplanes[q] = 0;
@@ -380,88 +657,161 @@ fn encode_work(outfile: &mut Vec<u8>, a: &mut [i32], nx: usize, ny: usize, scale
         }
     }
 
-    /*
-     * write nbitplanes
-     */
-    qwrite(outfile, &nbitplanes, nbitplanes.len() as usize);
-
-    /*
-     * write coded array
-     */
-    do_encode(outfile, a, nx, ny, nbitplanes);
-
-    /*
-     * write sign bits
-     */
-    if nsign > 0 {
-        qwrite(outfile, &signbits, nsign);
+    // write nbitplanes
+    if qwrite(outfile, &nbitplanes, nbitplanes.len()) == 0 {
+        ffpmsg("encode: output buffer too small");
+        return Err(EncodeError::DataCompressionError);
     }
+
+    // write coded array
+    let stat = do_encode(outfile, a, nx, ny, nbitplanes);
+
+    // write sign bits
+    if nsign > 0 && qwrite(outfile, &signbits, nsign) == 0 {
+        ffpmsg("encode: output buffer too small");
+        return Err(EncodeError::DataCompressionError);
+    }
+
+    stat
 }
 
+
 /* ######################################################################### */
-/// Shuffle
+/// Performs H-Compress encoding
 ///
 /// # Arguments
 ///
-/// * `a` - Array to shuffle
-/// * `nx` - Number of elements in column
-/// * `ny` - Number of elements in row
-/// * `nydim` - Actual length of row in array
+/// * `outfile` - Output buffer
+/// * `a` - input H-transform array (nx,ny)
+/// * `nx` - size of H-transform array
+/// * `ny` - size of H-transform array
+/// * `scale` - scale factor for digitization
 ///
-fn xshuffle(a: &mut [i32], nx: usize, ny: usize, nydim: usize) {
-    let mut pend: usize;
-    let mut p1: usize;
-    let mut p2: usize;
-    let mut pt: usize;
+fn encode_work64(
+    outfile: &mut Vec<u8>,
+    a: &mut [i64],
+    nx: usize,
+    ny: usize,
+    scale: i32,
+) -> Result<(), EncodeError> {
+    let mut nbitplanes: [u8; 3] = [0; 3];
+    let mut vmax: [i64; 3] = [0; 3];
+
+    let nel = nx * ny;
+
+    // write magic value
+    qwrite(outfile, &CODE_MAGIC, 2);
+    writeint(outfile, nx as i32); /* size of image */
+    writeint(outfile, ny as i32);
+    writeint(outfile, scale); /* scale factor for digitization */
 
     /*
-     * get temporary storage for shuffling elements
+    write first value of A (sum of all pixels -- the only value
+    which does not compress well)
      */
-    let mut tmp: Vec<i32> = Vec::with_capacity((ny + 1) / 2);
-    for j in 0..nx {
-        /*
-         * copy odd elements to tmp
-         */
-        pend = nydim * j + ny - 1;
-        p1 = nydim * j + 1;
-        pt = 0;
-        while p1 <= pend {
-            tmp[pt] = a[p1];
-            p1 += 2;
-            pt += 1;
+    writelonglong(outfile, i64::from(a[0]));
+
+    a[0] = 0;
+
+    // allocate array for sign bits and save values, 8 per byte (initialize to all zeros)
+    let mut signbits: Vec<u8> = Vec::new();
+    if signbits.try_reserve_exact((nel + 7) / 8).is_err() {
+        ffpmsg("encode64: insufficient memory");
+        return Err(EncodeError::DataCompressionError);
+    } else {
+        signbits.resize((nel + 7) / 8, 0);
+    }
+
+    let mut nsign = 0;
+    let mut bits_to_go = 8;
+
+    for i in 0..nel {
+        if a[i] > 0 {
+            // positive element, put zero at end of buffer
+
+            signbits[nsign] <<= 1;
+            bits_to_go -= 1;
+        } else if a[i] < 0 {
+            // negative element, shift in a one
+
+            signbits[nsign] <<= 1;
+            signbits[nsign] |= 1;
+            bits_to_go -= 1;
+
+            //replace a by absolute value
+            a[i] = -a[i];
         }
 
-        /*
-         * compress even elements into first half of A
-         */
-        p1 = nydim * j + 1;
-        p2 = nydim * j + 2;
-        while p2 < pend {
-            a[p1] = a[p2];
-            p1 += 1;
-            p2 += 2;
-        }
+        if bits_to_go == 0 {
+            // filled up this byte, go to the next one
 
-        /*
-         * put odd elements into 2nd half
-         */
-        for i in 0..(ny / 2) {
-            a[p1 + i] = tmp[i];
+            bits_to_go = 8;
+            nsign += 1;
         }
     }
-}
 
-fn arraymax(a: &mut [i32], nx: usize, ny: usize, ndim: usize) -> i32 {
-    let mut amax: i32 = 0;
-    for i in 0..nx {
-        for p in (i * ndim)..(i * ndim + ny) {
-            if a[p] > amax {
-                amax = a[p];
-            }
+    if bits_to_go != 8 {
+        /*
+        some bits in last element
+        move bits in last byte to bottom and increment nsign
+         */
+        signbits[nsign] <<= bits_to_go;
+        nsign += 1;
+    }
+
+    /*
+    calculate number of bit planes for 3 quadrants
+
+    quadrant 0=bottom left, 1=bottom right or top left, 2=top right,
+     */
+    vmax.iter_mut().for_each(|x| *x = 0);
+
+    // get maximum absolute value in each quadrant
+    let nx2 = (nx + 1) / 2;
+    let ny2 = (ny + 1) / 2;
+    let mut j = 0; /* column counter	*/
+    let mut k = 0; /* row counter		*/
+    for i in 0..nel {
+        let q = usize::from(j >= ny2) + usize::from(k >= nx2);
+        if vmax[q] < a[i] {
+            vmax[q] = a[i];
+        }
+
+        j += 1;
+        if j >= ny {
+            j = 0;
+            k += 1;
         }
     }
-    amax
+
+    // now calculate number of bits for each quadrant
+
+    for q in 0..3 {
+        nbitplanes[q] = 0;
+        while vmax[q] > 0 {
+            vmax[q] >>= 1;
+            nbitplanes[q] += 1;
+        }
+    }
+
+    // write nbitplanes
+    if qwrite(outfile, &nbitplanes, nbitplanes.len()) == 0 {
+        ffpmsg("encode64: output buffer too small");
+        return Err(EncodeError::DataCompressionError);
+    }
+
+    // write coded array
+    let stat = do_encode64(outfile, a, nx, ny, nbitplanes);
+
+    // write sign bits
+    if nsign > 0 && qwrite(outfile, &signbits, nsign) == 0 {
+        ffpmsg("encode64: output buffer too small");
+        return Err(EncodeError::DataCompressionError);
+    }
+
+    stat
 }
+
 
 /* ######################################################################### */
 /// Write n bytes from buffer into file.
@@ -495,7 +845,6 @@ fn writeint(outfile: &mut Vec<u8>, a: i32) {
     let mut b: [u8; 4] = [0; 4];
     let mut a = a;
 
-    // TODO check this
     for i in (0..4).rev() {
         b[i] = a as u8;
         a >>= 8;
@@ -528,6 +877,7 @@ fn writelonglong(outfile: &mut Vec<u8>, a: i64) {
     }
 }
 
+
 /// Encode 2-D array and write stream of characters on outfile
 ///
 /// # Arguments
@@ -538,50 +888,46 @@ fn writelonglong(outfile: &mut Vec<u8>, a: i64) {
 /// * `ny` - Array dimensions [nx][ny]
 /// * `nbitplanes` - Number of bit planes in quadrants
 ///
-/// # Returns
-///
-/// Total number of bits written
-///
 /// Note: This version assumes that A is positive.
-fn do_encode(outfile: &mut Vec<u8>, a: &[i32], nx: usize, ny: usize, nbitplanes: [u8; 3]) -> i32 {
+fn do_encode(
+    outfile: &mut Vec<u8>,
+    a: &[i32],
+    nx: usize,
+    ny: usize,
+    nbitplanes: [u8; 3],
+) -> Result<(), EncodeError> {
     let nx2: usize = (nx + 1) / 2;
     let ny2: usize = (ny + 1) / 2;
 
-    /*
-     * Initialize bit output
-     */
+    // Initialize bit output
     let mut buffer2 = start_outputing_bits();
 
-    /*
-     * write out the bit planes for each quadrant
-     */
-    let mut stat: i32 = qtree_encode(outfile, a, ny, nx2, ny2, nbitplanes[0] as i32, &mut buffer2);
+    //write out the bit planes for each quadrant
+    qtree_encode(outfile, a, ny, nx2, ny2, nbitplanes[0] as i32, &mut buffer2)?;
 
-    if stat == 0 {
-        stat = qtree_encode(
-            outfile,
-            &a[ny2..],
-            ny,
-            nx2,
-            ny / 2,
-            i32::from(nbitplanes[1]),
-            &mut buffer2,
-        );
-    }
+    qtree_encode(
+        outfile,
+        &a[ny2..],
+        ny,
+        nx2,
+        ny / 2,
+        i32::from(nbitplanes[1]),
+        &mut buffer2,
+    )?;
 
-    if stat == 0 {
-        stat = qtree_encode(
-            outfile,
-            &a[ny * nx2..],
-            ny,
-            nx / 2,
-            ny2,
-            i32::from(nbitplanes[1]),
-            &mut buffer2,
-        );
-    }
+    qtree_encode(
+        outfile,
+        &a[ny * nx2..],
+        ny,
+        nx / 2,
+        ny2,
+        i32::from(nbitplanes[1]),
+        &mut buffer2,
+    )?;
 
-    if stat == 0 && ny * nx2 + ny2 < a.len() {
+    let mut stat = Ok(());
+
+    if ny * nx2 + ny2 < a.len() {
         stat = qtree_encode(
             outfile,
             &a[(ny * nx2 + ny2)..],
@@ -593,30 +939,89 @@ fn do_encode(outfile: &mut Vec<u8>, a: &[i32], nx: usize, ny: usize, nbitplanes:
         );
     }
 
-    /*
-     * Add zero as an EOF symbol
-     */
+    // Add zero as an EOF symbol
     output_nybble(outfile, 0, &mut buffer2);
     done_outputing_bits(outfile, &mut buffer2);
 
     stat
 }
 
+
+/// Encode 2-D array and write stream of characters on outfile
+///
+/// # Arguments
+///
+/// * `outfile` - Output data stream
+/// * `a` - Array of values to encode
+/// * `nx` - Array dimensions [nx][ny]
+/// * `ny` - Array dimensions [nx][ny]
+/// * `nbitplanes` - Number of bit planes in quadrants
+///
+/// Note: This version assumes that A is positive.
+fn do_encode64(
+    outfile: &mut Vec<u8>,
+    a: &[i64],
+    nx: usize,
+    ny: usize,
+    nbitplanes: [u8; 3],
+) -> Result<(), EncodeError> {
+    let nx2: usize = (nx + 1) / 2;
+    let ny2: usize = (ny + 1) / 2;
+
+    // Initialize bit output
+    let mut buffer2 = start_outputing_bits();
+
+    //write out the bit planes for each quadrant
+    qtree_encode64(outfile, a, ny, nx2, ny2, nbitplanes[0] as i32, &mut buffer2)?;
+
+    qtree_encode64(
+        outfile,
+        &a[ny2..],
+        ny,
+        nx2,
+        ny / 2,
+        i32::from(nbitplanes[1]),
+        &mut buffer2,
+    )?;
+
+    qtree_encode64(
+        outfile,
+        &a[ny * nx2..],
+        ny,
+        nx / 2,
+        ny2,
+        i32::from(nbitplanes[1]),
+        &mut buffer2,
+    )?;
+
+    let mut stat = Ok(());
+
+    if ny * nx2 + ny2 < a.len() {
+        stat = qtree_encode64(
+            outfile,
+            &a[(ny * nx2 + ny2)..],
+            ny,
+            nx / 2,
+            ny / 2,
+            i32::from(nbitplanes[2]),
+            &mut buffer2,
+        );
+    }
+
+    // Add zero as an EOF symbol
+    output_nybble(outfile, 0, &mut buffer2);
+    done_outputing_bits(outfile, &mut buffer2);
+
+    stat
+}
+
+
 /* ######################################################################### */
 /* INITIALIZE FOR BIT OUTPUT */
-
 pub struct Buffer3 {
     pub bitbuffer: i32,
     pub bits_to_go: i32,
 }
-
-/*
-pub struct Buffer1 {
-    pub bitbuffer1: i32,
-    pub bits_to_go1: i32,
-    pub bitcount: usize,
-}
-*/
 
 pub struct Buffer2 {
     pub buffer2: i32,
@@ -643,25 +1048,21 @@ fn start_outputing_bits() -> Buffer2 {
 /// * `b2` - Buffer to write to
 ///
 fn output_nbits(outfile: &mut Vec<u8>, bits: i32, n: usize, b2: &mut Buffer2) {
-    /* AND mask for the right-most n bits */
+    // AND mask for the right-most n bits
     let mask: [i32; 9] = [0, 1, 3, 7, 15, 31, 63, 127, 255];
 
-    /*
-     * insert bits at end of buffer
-     */
+    // insert bits at end of buffer
     b2.buffer2 <<= n;
-    //lbitbuffer |= bits & ((1<<n)-1);
-    b2.buffer2 |= bits & mask[n as usize];
+    b2.buffer2 |= bits & mask[n];
     b2.bits_to_go2 -= n as i32;
     while b2.bits_to_go2 <= 0 {
-        /*
-         * buffer full, put out top 8 bits
-         */
+        // buffer full, put out top 8 bits
+
         // ((lbitbuffer>>(-bits_to_go2)) & 0xff)
         outfile.push((b2.buffer2 >> (-b2.bits_to_go2)) as u8);
         b2.bits_to_go2 += 8;
     }
-    b2.bitcount += n as usize;
+    b2.bitcount += n;
 }
 
 /* ######################################################################### */
@@ -689,7 +1090,6 @@ fn output_nybble(outfile: &mut Vec<u8>, bits: i32, buffer: &mut Buffer2) {
 /// * `array` - Array of bits to write
 ///
 fn output_nnybble(outfile: &mut Vec<u8>, n: usize, array: &[u8], b2: &mut Buffer2) {
-    /*  */
     let mut kk = 0;
 
     if n == 1 {
@@ -697,33 +1097,27 @@ fn output_nnybble(outfile: &mut Vec<u8>, n: usize, array: &[u8], b2: &mut Buffer
         return;
     }
 
-    /* forcing byte alignment doesn;t help, and even makes it go slightly slower
-    if (bits_to_go2 != 8)
-    output_nbits(outfile, kk, bits_to_go2);
-    */
-
     if b2.bits_to_go2 <= 4 {
-        /* just room for 1 nybble; write it out separately */
+        // just room for 1 nybble; write it out separately
         output_nybble(outfile, i32::from(array[0]), b2);
         kk += 1; /* index to next array element */
 
-        if n == 2
-        /* only 1 more nybble to write out */
-        {
+        if n == 2 {
+            // only 1 more nybble to write out
             output_nybble(outfile, i32::from(array[1]), b2);
             return;
         }
     }
 
-    /* bits_to_go2 is now in the range 5 - 8 */
+    // bits_to_go2 is now in the range 5 - 8
     let shift = 8 - b2.bits_to_go2;
 
-    /* now write out pairs of nybbles; this does not affect value of bits_to_go2 */
+    // now write out pairs of nybbles; this does not affect value of bits_to_go2
     let jj = (n - kk) / 2;
 
     if b2.bits_to_go2 == 8 {
-        /* special case if nybbles are aligned on byte boundary */
-        /* this actually seems to make very little differnece in speed */
+        // special case if nybbles are aligned on byte boundary
+        // this actually seems to make very little difference in speed
         b2.buffer2 = 0;
         for _ii in 0..jj {
             outfile.push(((array[kk] & 15) << 4) | (array[kk + 1] & 15));
@@ -735,9 +1129,7 @@ fn output_nnybble(outfile: &mut Vec<u8>, n: usize, array: &[u8], b2: &mut Buffer
                 (b2.buffer2 << 8) | (((array[kk] & 15) << 4) | (array[kk + 1] & 15)) as i32;
             kk += 2;
 
-            /*
-            buffer2 full, put out top 8 bits
-            */
+            // buffer2 full, put out top 8 bits
 
             outfile.push(((b2.buffer2 >> shift) & 0xff) as u8);
         }
@@ -745,7 +1137,7 @@ fn output_nnybble(outfile: &mut Vec<u8>, n: usize, array: &[u8], b2: &mut Buffer
 
     b2.bitcount += 8 * (jj - 1);
 
-    /* write out last odd nybble, if present */
+    // write out last odd nybble, if present
     if kk != n {
         output_nybble(outfile, i32::from(array[n - 1]), b2);
     }
@@ -762,7 +1154,7 @@ fn done_outputing_bits(outfile: &mut Vec<u8>, buffer: &mut Buffer2) {
     if buffer.bits_to_go2 < 8 {
         outfile.push((buffer.buffer2 << buffer.bits_to_go2) as u8);
 
-        /* count the garbage bits too */
+        // count the garbage bits too
         buffer.bitcount += buffer.bits_to_go2 as usize;
     }
 }
@@ -781,9 +1173,6 @@ fn done_outputing_bits(outfile: &mut Vec<u8>, buffer: &mut Buffer2) {
 /// * `nbitplanes` - Number of bit planes to encode
 /// * `buffer2` - Buffer to write to
 ///
-/// # Returns
-///
-/// 0 if successful, -1 if not
 fn qtree_encode(
     outfile: &mut Vec<u8>,
     a: &[i32],
@@ -792,31 +1181,27 @@ fn qtree_encode(
     nqy: usize,
     nbitplanes: i32,
     buffer2: &mut Buffer2,
-) -> i32 {
+) -> Result<(), EncodeError> {
     let mut b: usize;
     let _k: i32;
 
     let mut nx: usize;
     let mut ny: usize;
 
-    // *sinput, *bptr, *bufend;
     let mut b3: Buffer3 = Buffer3 {
         bitbuffer: 0,
         bits_to_go: 0,
     };
 
-    /*
-     * log2n is log2 of max(nqx,nqy) rounded up to next power of 2
-     */
+    // log2n is log2 of max(nqx,nqy) rounded up to next power of 2
     let nqmax: usize = if nqx > nqy { nqx } else { nqy };
     let mut log2n: i32 = ((nqmax as f32).ln() / 2.0_f32.ln() + 0.5) as i32;
+
     if nqmax > (1 << log2n) {
         log2n += 1;
     }
 
-    /*
-     * initialize buffer point, max buffer size
-     */
+    // initialize buffer point, max buffer size
     let nqx2: usize = (nqx + 1) / 2;
     let nqy2: usize = (nqy + 1) / 2;
     let bmax: usize = (nqx2 * nqy2 + 2) / 2;
@@ -828,52 +1213,48 @@ fn qtree_encode(
     coding is needed.
     Buffer is used to store string of codes for output.
      */
-    let mut scratch: Vec<u8> = vec![0; 2 * bmax];
-    let _scratch2: Vec<u8> = vec![0; 2 * bmax];
-    let mut buffer: Vec<u8> = vec![0; bmax];
+    let mut scratch: Vec<u8> = Vec::new();
+    if scratch.try_reserve_exact(2 * bmax).is_err() {
+        ffpmsg("qtree_encode: insufficient memory");
+        return Err(EncodeError::DataCompressionError);
+    } else {
+        scratch.resize(2 * bmax, 0);
+    }
 
-    let _bufend = bmax;
+    let mut buffer: Vec<u8> = Vec::new();
+    if buffer.try_reserve_exact(bmax).is_err() {
+        ffpmsg("qtree_encode: insufficient memory");
+        return Err(EncodeError::DataCompressionError);
+    } else {
+        buffer.resize(bmax, 0);
+    }
 
-    /*
-     * now encode each bit plane, starting with the top
-     */
+    // now encode each bit plane, starting with the top
     for bit in (0..(nbitplanes as usize)).rev() {
-        /*
-         * initialize bit buffer
-         */
+        // initialize bit buffer
         b = 0;
         b3.bitbuffer = 0;
         b3.bits_to_go = 0;
 
-        /*
-         * on first pass copy A to scr1 array
-         */
+        // on first pass copy A to scr1 array
         qtree_onebit(a, n, nqx, nqy, &mut scratch, bit);
         nx = (nqx + 1) >> 1;
         ny = (nqy + 1) >> 1;
 
-        /*
-         * copy non-zero values to output buffer, which will be written
-         * in reverse order
-         */
-        if bufcopy(&scratch, nx * ny, &mut buffer, &mut b, bmax, &mut b3) > 0 {
-            /*
-            quadtree is expanding data,
-            change warning code and just fill buffer with bit-map
-             */
+        // copy non-zero values to output buffer, which will be written in reverse order
+        if bufcopy(&scratch, nx * ny, &mut buffer, &mut b, bmax, &mut b3) {
+            //quadtree is expanding data, change warning code and just fill buffer with bit-map
             write_bdirect(outfile, a, n, nqx, nqy, &mut scratch, bit, buffer2);
             continue;
         }
 
-        /*
-         * do log2n reductions
-         */
+        // do log2n reductions
         let mut is_continue = false;
         for _ in 1..log2n {
             qtree_reduce(&mut scratch, ny, nx, ny);
             nx = (nx + 1) >> 1;
             ny = (ny + 1) >> 1;
-            if bufcopy(&scratch, nx * ny, &mut buffer, &mut b, bmax, &mut b3) > 0 {
+            if bufcopy(&scratch, nx * ny, &mut buffer, &mut b, bmax, &mut b3) {
                 // nx=1, ny=1, b=1??, scratch=[10,8,0,0], bmax=2, b3=0/1
                 write_bdirect(outfile, a, n, nqx, nqy, &mut scratch, bit, buffer2);
                 is_continue = true;
@@ -885,17 +1266,13 @@ fn qtree_encode(
             continue;
         }
 
-        /*
-         * OK, we've got the code in buffer
-         * Write quadtree warning code, then write buffer in reverse order
-         */
+        // OK, we've got the code in buffer
+        // Write quadtree warning code, then write buffer in reverse order
         output_nybble(outfile, 0xF, buffer2);
 
         if b == 0 {
             if b3.bits_to_go > 0 {
-                /*
-                 * put out the last few bits
-                 */
+                // put out the last few bits
                 output_nbits(
                     outfile,
                     b3.bitbuffer & ((1 << b3.bits_to_go) - 1),
@@ -903,16 +1280,13 @@ fn qtree_encode(
                     buffer2,
                 );
             } else {
-                /*
-                 * have to write a zero nybble if there are no 1's in array
-                 */
+                // have to write a zero nybble if there are no 1's in array
                 output_nbits(outfile, CODE[0], NCODE[0] as usize, buffer2);
             }
         } else {
             if b3.bits_to_go > 0 {
-                /*
-                 * put out the last few bits
-                 */
+                // put out the last few bits
+
                 output_nbits(
                     outfile,
                     b3.bitbuffer & ((1 << b3.bits_to_go) - 1),
@@ -920,22 +1294,178 @@ fn qtree_encode(
                     buffer2,
                 );
             }
-            /*
-             * write in blocks of 24 bits to speed things up
-             */
+
+            // write in blocks of 24 bits to speed things up
             for i in (0..b).rev() {
                 output_nbits(outfile, i32::from(buffer[i]), 8, buffer2);
             }
         }
     }
-    0
+    Ok(())
 }
 
-/* ######################################################################### */
-/*
- * copy non-zero codes from array to buffer
- */
 
+/// Encode values in quadrant of 2-D array using binary quadtree coding for each bit plane.  
+///
+/// Assumes array is positive.
+///
+/// # Arguments
+///
+/// * `outfile` - Output data stream
+/// * `a` - Array of values to encode
+/// * `n` - Number of elements in array
+/// * `nqx` - Number of elements in X axis
+/// * `nqy` - Number of elements in Y axis
+/// * `nbitplanes` - Number of bit planes to encode
+/// * `buffer2` - Buffer to write to
+///
+fn qtree_encode64(
+    outfile: &mut Vec<u8>,
+    a: &[i64],
+    n: usize,
+    nqx: usize,
+    nqy: usize,
+    nbitplanes: i32,
+    buffer2: &mut Buffer2,
+) -> Result<(), EncodeError> {
+    let mut b: usize;
+
+    let mut nx: usize;
+    let mut ny: usize;
+
+    let mut b3: Buffer3 = Buffer3 {
+        bitbuffer: 0,
+        bits_to_go: 0,
+    };
+
+    // log2n is log2 of max(nqx,nqy) rounded up to next power of 2
+    let nqmax: usize = if nqx > nqy { nqx } else { nqy };
+    let mut log2n: i32 = ((nqmax as f32).ln() / 2.0_f32.ln() + 0.5) as i32;
+
+    if nqmax > (1 << log2n) {
+        log2n += 1;
+    }
+
+    // initialize buffer point, max buffer size
+    let nqx2: usize = (nqx + 1) / 2;
+    let nqy2: usize = (nqy + 1) / 2;
+    let bmax: usize = (nqx2 * nqy2 + 2) / 2;
+
+    /*
+    We're indexing A as a 2-D array with dimensions (nqx,nqy).
+    Scratch is 2-D with dimensions (nqx/2,nqy/2) rounded up.
+    Scr1 is used to store first level of quadtree in case direct
+    coding is needed.
+    Buffer is used to store string of codes for output.
+     */
+    let mut scratch: Vec<u8> = Vec::new();
+    if scratch.try_reserve_exact(2 * bmax).is_err() {
+        ffpmsg("qtree_encode64: insufficient memory");
+        return Err(EncodeError::DataCompressionError);
+    } else {
+        scratch.resize(2 * bmax, 0);
+    }
+
+    let mut buffer: Vec<u8> = Vec::new();
+    if buffer.try_reserve_exact(bmax).is_err() {
+        ffpmsg("qtree_encode64: insufficient memory");
+        return Err(EncodeError::DataCompressionError);
+    } else {
+        buffer.resize(bmax, 0);
+    }
+
+    // now encode each bit plane, starting with the top
+    for bit in (0..(nbitplanes as usize)).rev() {
+        // initialize bit buffer
+        b = 0;
+        b3.bitbuffer = 0;
+        b3.bits_to_go = 0;
+
+        // on first pass copy A to scr1 array
+        qtree_onebit64(a, n, nqx, nqy, &mut scratch, bit);
+        nx = (nqx + 1) >> 1;
+        ny = (nqy + 1) >> 1;
+
+        // copy non-zero values to output buffer, which will be written in reverse order
+        if bufcopy(&scratch, nx * ny, &mut buffer, &mut b, bmax, &mut b3) {
+            //quadtree is expanding data, change warning code and just fill buffer with bit-map
+            write_bdirect64(outfile, a, n, nqx, nqy, &mut scratch, bit, buffer2);
+            continue;
+        }
+
+        // do log2n reductions
+        let mut is_continue = false;
+        for _ in 1..log2n {
+            qtree_reduce(&mut scratch, ny, nx, ny);
+            nx = (nx + 1) >> 1;
+            ny = (ny + 1) >> 1;
+            if bufcopy(&scratch, nx * ny, &mut buffer, &mut b, bmax, &mut b3) {
+                // nx=1, ny=1, b=1??, scratch=[10,8,0,0], bmax=2, b3=0/1
+                write_bdirect64(outfile, a, n, nqx, nqy, &mut scratch, bit, buffer2);
+                is_continue = true;
+                break; // Break this loop and continue with next
+            }
+        }
+
+        if is_continue {
+            continue;
+        }
+
+        // OK, we've got the code in buffer
+        // Write quadtree warning code, then write buffer in reverse order
+        output_nybble(outfile, 0xF, buffer2);
+
+        if b == 0 {
+            if b3.bits_to_go > 0 {
+                // put out the last few bits
+                output_nbits(
+                    outfile,
+                    b3.bitbuffer & ((1 << b3.bits_to_go) - 1),
+                    b3.bits_to_go as usize,
+                    buffer2,
+                );
+            } else {
+                // have to write a zero nybble if there are no 1's in array
+                output_nbits(outfile, CODE[0], NCODE[0] as usize, buffer2);
+            }
+        } else {
+            if b3.bits_to_go > 0 {
+                // put out the last few bits
+
+                output_nbits(
+                    outfile,
+                    b3.bitbuffer & ((1 << b3.bits_to_go) - 1),
+                    b3.bits_to_go as usize,
+                    buffer2,
+                );
+            }
+
+            // write in blocks of 24 bits to speed things up
+            for i in (0..b).rev() {
+                output_nbits(outfile, i32::from(buffer[i]), 8, buffer2);
+            }
+        }
+    }
+    Ok(())
+}
+
+
+
+/* ######################################################################### */
+/// copy non-zero codes from array to buffer
+///
+/// # Arguments
+///
+/// * `a` - Array of values to encode
+/// * `n` - Number of elements in array
+/// * `buffer` - Buffer to write to
+/// * `b` - Index of buffer
+/// * `bmax` - Maximum size of buffer
+/// * `qtb` - Buffer3
+///
+/// # Returns
+///
+/// flase if successful, true if buffer is full
 fn bufcopy(
     a: &[u8],
     n: usize,
@@ -943,23 +1473,20 @@ fn bufcopy(
     b: &mut usize,
     bmax: usize,
     qtb: &mut Buffer3,
-) -> i32 {
+) -> bool {
     for i in 0..n {
         if a[i] != 0 {
-            /*
-             * add Huffman code for a[i] to buffer
-             */
+            // add Huffman code for a[i] to buffer
             qtb.bitbuffer |= CODE[a[i] as usize] << qtb.bits_to_go;
             qtb.bits_to_go += NCODE[a[i] as usize];
+
             if qtb.bits_to_go >= 8 {
                 buffer[*b] = qtb.bitbuffer as u8;
                 *b += 1;
 
-                /*
-                 * return warning code if we fill buffer
-                 */
+                // return warning code if we fill buffer
                 if *b >= bmax {
-                    return 1;
+                    return true;
                 }
 
                 qtb.bitbuffer >>= 8;
@@ -967,7 +1494,7 @@ fn bufcopy(
             }
         }
     }
-    0
+    false
 }
 
 /// Do first quadtree reduction step on bit BIT of array A.
@@ -987,9 +1514,7 @@ fn qtree_onebit(a: &[i32], n: usize, nx: usize, ny: usize, b: &mut [u8], bit: us
     let mut s10: usize;
     let mut s00: usize;
 
-    /*
-     * use selected bit to get amount to shift
-     */
+    // use selected bit to get amount to shift
     let b0: i32 = 1 << bit;
     let b1: i32 = b0 << 1;
     let b2: i32 = b0 << 2;
@@ -1032,6 +1557,7 @@ fn qtree_onebit(a: &[i32], n: usize, nx: usize, ny: usize, b: &mut [u8], bit: us
         }
         ii += 2;
     }
+
     if ii < nx {
         /*
          * column size is odd, do last row
@@ -1039,6 +1565,7 @@ fn qtree_onebit(a: &[i32], n: usize, nx: usize, ny: usize, b: &mut [u8], bit: us
          */
         s00 = n * ii;
         let mut ji = 0;
+
         if ny == 0 {
             return;
         } // Early return, prevent underflow on next line (ny - 1)
@@ -1049,13 +1576,13 @@ fn qtree_onebit(a: &[i32], n: usize, nx: usize, ny: usize, b: &mut [u8], bit: us
             s00 += 2;
             ji += 2;
         }
+
         if ji < ny {
             /*
              * both row and column size are odd, do corner element
              * s00+1, s10, s10+1 are off edge
              */
             b[k] = (((a[s00] << 3) & b3) >> bit) as u8;
-            k += 1;
         }
     }
 }
@@ -1073,7 +1600,6 @@ fn qtree_onebit(a: &[i32], n: usize, nx: usize, ny: usize, b: &mut [u8], bit: us
 /// * `ny` - Number of elements in Y axis
 ///
 fn qtree_reduce(a: &mut [u8], n: usize, nx: usize, ny: usize) {
-    //int i, j, k;
     let mut s10;
     let mut s00;
     let mut k = 0;
@@ -1082,8 +1608,8 @@ fn qtree_reduce(a: &mut [u8], n: usize, nx: usize, ny: usize) {
     if nx == 0 {
         return;
     } // Early return and prevents underflows
+
     for i in (0..(nx - 1)).step_by(2) {
-        //for (i = 0; i<nx-1; i += 2) {
         s00 = n * i; /* s00 is index of a[i,j]	*/
         s10 = s00 + n; /* s10 is index of a[i+1,j]	*/
 
@@ -1091,8 +1617,8 @@ fn qtree_reduce(a: &mut [u8], n: usize, nx: usize, ny: usize) {
             ii += 2;
             continue;
         } // Early continue and prevents underflows
+
         for _j in (0..(ny - 1)).step_by(2) {
-            //for (j = 0; j<ny-1; j += 2) {
             a[k] = u8::from(a[s10 + 1] != 0)
                 | (u8::from(a[s10] != 0) << 1)
                 | (u8::from(a[s00 + 1] != 0) << 2)
@@ -1112,6 +1638,7 @@ fn qtree_reduce(a: &mut [u8], n: usize, nx: usize, ny: usize) {
         }
         ii += 2;
     }
+
     if nx % 2 != 0 {
         /*
          * column size is odd, do last row
@@ -1121,19 +1648,19 @@ fn qtree_reduce(a: &mut [u8], n: usize, nx: usize, ny: usize) {
         if ny == 0 {
             return;
         } // Early return and prevents underflows
+
         for _j in (0..(ny - 1)).step_by(2) {
-            //for (j = 0; j<ny-1; j += 2) {
             a[k] = (u8::from(a[s00 + 1] != 0) << 2) | (u8::from(a[s00] != 0) << 3);
             k += 1;
             s00 += 2;
         }
+
         if ny % 2 != 0 {
             /*
              * both row and column size are odd, do corner element
              * s00+1, s10, s10+1 are off edge
              */
             a[k] = u8::from(a[s00] != 0) << 3;
-            k += 1;
         }
     }
 }
@@ -1167,7 +1694,6 @@ mod tests {
     fn test_output_nbits() {
         let mut charb: Vec<u8> = Vec::with_capacity(4);
 
-        //= vec![0; 4];
         let mut b2 = Buffer2 {
             buffer2: 0,
             bits_to_go2: 8,
@@ -1189,8 +1715,8 @@ mod tests {
         let mut input: [i32; 16] = [2, 2, 1, 2, 3, 2, 7, 7, 4, 2, 2, 1, 2, 4, 25, 2];
         let mut output: Vec<u8> = Vec::with_capacity(16);
 
-        let mut encoder = HCEncoder::new();
-        let res = encoder.encode(&mut input, 4, 4, 0, &mut output);
+        let encoder = HCEncoder::new();
+        let _res = encoder.encode(&mut input, 4, 4, 0, &mut output);
 
         assert_eq!(output.len(), 48);
         assert_eq!(
@@ -1214,7 +1740,7 @@ mod tests {
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
         let encoder = HCEncoder::new();
-        let res = encoder.encode(&mut input, 1, 10, 0, &mut output);
+        let _res = encoder.encode(&mut input, 1, 10, 0, &mut output);
         println!("{:#?}", output);
         assert_eq!(output.len(), 101);
 
@@ -1238,8 +1764,8 @@ mod tests {
         ];
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
-        let mut encoder = HCEncoder::new();
-        let res = encoder.encode(&mut input, 1, 12, 0, &mut output);
+        let encoder = HCEncoder::new();
+        let _res = encoder.encode(&mut input, 1, 12, 0, &mut output);
 
         assert_eq!(output.len(), 106);
 
@@ -1264,8 +1790,8 @@ mod tests {
         ];
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
-        let mut encoder = HCEncoder::new();
-        let res = encoder.encode(&mut input, 1, 16, 0, &mut output);
+        let encoder = HCEncoder::new();
+        let _res = encoder.encode(&mut input, 1, 16, 0, &mut output);
 
         assert_eq!(output.len(), 140);
 
@@ -1294,8 +1820,8 @@ mod tests {
         ];
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
-        let mut encoder = HCEncoder::new();
-        let res = encoder.encode(&mut input, 1, 82, 0, &mut output);
+        let encoder = HCEncoder::new();
+        let _res = encoder.encode(&mut input, 1, 82, 0, &mut output);
 
         assert_eq!(output.len(), 154);
 
@@ -1320,8 +1846,8 @@ mod tests {
         let mut input: [i32; 10] = [61, 14, 0, 0, 0, -23641, -13558, -28528, -28526, -28528];
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
-        let mut encoder = HCEncoder::new();
-        let res = encoder.encode(&mut input, 10, 1, 0, &mut output);
+        let encoder = HCEncoder::new();
+        let _res = encoder.encode(&mut input, 10, 1, 0, &mut output);
 
         assert_eq!(output.len(), 104);
 
@@ -1345,8 +1871,8 @@ mod tests {
         ];
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
-        let mut encoder = HCEncoder::new();
-        let res = encoder.encode(&mut input, 10, 1, 0, &mut output);
+        let encoder = HCEncoder::new();
+        let _res = encoder.encode(&mut input, 10, 1, 0, &mut output);
 
         assert_eq!(output.len(), 84);
 
@@ -1365,7 +1891,7 @@ mod tests {
     #[test]
     fn test_htrans() {
         let mut input: [i32; 16] = [2, 2, 1, 2, 3, 2, 7, 7, 4, 2, 2, 1, 2, 4, 25, 2];
-        htrans(&mut input, 4, 4);
+        htrans(&mut input, 4, 4).unwrap();
 
         assert_eq!(
             input,
@@ -1389,12 +1915,10 @@ mod tests {
         let ny = 2;
         let bit = 4;
         let n = 4;
-        let mut a: [i32; 16] = [32, 16, -2, 2, 12, 6, 0, -24, 2, 12, -1, -1, 0, 24, 4, -22];
+        let a: [i32; 16] = [32, 16, -2, 2, 12, 6, 0, -24, 2, 12, -1, -1, 0, 24, 4, -22];
         let mut scratch: [u8; 2] = [0; 2];
 
-        let output: Vec<u8> = Vec::with_capacity(16);
-
-        qtree_onebit(&mut a, n, nx, ny, &mut scratch, bit);
+        qtree_onebit(&a, n, nx, ny, &mut scratch, bit);
 
         assert_eq!(
             a,
@@ -1410,12 +1934,10 @@ mod tests {
         let ny = 0;
         let bit = 16;
         let n = 1;
-        let mut a: [i32; 9] = [37536, 37088, 224, 36864, 0, 222, 77022, 222, 0];
+        let a: [i32; 9] = [37536, 37088, 224, 36864, 0, 222, 77022, 222, 0];
         let mut scratch: [u8; 4] = [99; 4];
 
-        let output: Vec<u8> = Vec::with_capacity(16);
-
-        qtree_onebit(&mut a, n, nx, ny, &mut scratch, bit);
+        qtree_onebit(&a, n, nx, ny, &mut scratch, bit);
 
         assert_eq!(a, [37536, 37088, 224, 36864, 0, 222, 77022, 222, 0]);
         assert_eq!(scratch, [99, 99, 99, 99]);
@@ -1423,7 +1945,7 @@ mod tests {
 
     #[test]
     fn test_bufcopy() {
-        let mut a: [u8; 2] = [4, 0];
+        let a: [u8; 2] = [4, 0];
         let mut buffer: [u8; 1] = [0];
         let nx = 1;
         let ny = 1;
@@ -1434,7 +1956,7 @@ mod tests {
             bits_to_go: 0,
         };
 
-        let res = bufcopy(&mut a, nx * ny, &mut buffer, &mut b, bmax, &mut b3);
+        let _res = bufcopy(&a, nx * ny, &mut buffer, &mut b, bmax, &mut b3);
 
         assert_eq!(b3.bitbuffer, 2);
         assert_eq!(b3.bits_to_go, 3);
@@ -1443,7 +1965,7 @@ mod tests {
 
         // Go again but force buffer to fill
         b3.bits_to_go = 7;
-        let res = bufcopy(&mut a, nx * ny, &mut buffer, &mut b, bmax, &mut b3);
+        let _res = bufcopy(&a, nx * ny, &mut buffer, &mut b, bmax, &mut b3);
 
         assert_eq!(b3.bitbuffer, 258);
         assert_eq!(b3.bits_to_go, 10);
@@ -1483,7 +2005,7 @@ mod tests {
         assert_eq!(outfile, [4]);
         assert_eq!(b2.bits_to_go2, 8);
         assert_eq!(b2.bitcount, 168);
-        assert_eq!(b2.buffer2 as i32, 2088303364); // We use usize so need to truncate
+        assert_eq!({ b2.buffer2 }, 2088303364); // We use usize so need to truncate
     }
 
     #[test]
@@ -1504,6 +2026,6 @@ mod tests {
         assert_eq!(outfile, [2, _t as u8]); // Same as 2,136
         assert_eq!(b2.bits_to_go2, 8);
         assert_eq!(b2.bitcount, 8);
-        assert_eq!(b2.buffer2 as i32, 0); // We use usize so need to truncate
+        assert_eq!({ b2.buffer2 }, 0); // We use usize so need to truncate
     }
 }
