@@ -1,10 +1,11 @@
 fn ffpmsg(_m: &str) {}
 
-/// Huffman code values and number of bits in each code
+/// Huffman code values and 
 const CODE: [i32; 16] = [
     0x3e, 0x00, 0x01, 0x08, 0x02, 0x09, 0x1a, 0x1b, 0x03, 0x1c, 0x0a, 0x1d, 0x0b, 0x1e, 0x3f, 0x0c,
 ];
 
+/// Number of bits in each code
 const NCODE: [i32; 16] = [6, 3, 3, 4, 3, 4, 5, 5, 3, 5, 4, 5, 4, 5, 6, 4];
 
 const CODE_MAGIC: [u8; 2] = [0xDD, 0x99];
@@ -394,7 +395,7 @@ fn htrans64(a: &mut [i64], nx: usize, ny: usize) -> Result<(), EncodeError> {
 }
 
 /* ######################################################################### */
-/// Round to multiple of scale
+/// Digitize H-transform, round to multiple of scale
 ///
 /// # Arguments
 ///
@@ -426,7 +427,7 @@ fn digitize(a: &mut [i32], nx: usize, ny: usize, scale: i32) {
 }
 
 /* ######################################################################### */
-/// Round to multiple of scale
+/// Digitize H-transform, round to multiple of scale
 ///
 /// # Arguments
 ///
