@@ -1463,6 +1463,288 @@ fn qtree_bitins(a: &mut [u8], nx: usize, ny: usize, b: &mut [i32], n: usize, bit
 }
 
 /*  ############################################################################  */
+/// Copy 4-bit values from a[(nx+1)/2,(ny+1)/2] to b[nx,ny], expanding each value to 2x2 pixels and inserting into bitplane BIT of B.
+///
+/// A,B may NOT be same array (it wouldn't make sense to be inserting
+/// bits into the same array anyway.)
+///
+/// # Arguments
+///
+/// * `a` - 1-D array of 4-bit values
+/// * `nx` - x dimension of a
+/// * `ny` - y dimension of a
+/// * `b` - 1-D array of 32-bit values
+/// * `n` - y dimension of b
+/// * `bit` - bitplane to insert into
+///
+fn qtree_bitins64(a: &mut [u8], nx: usize, ny: usize, b: &mut [i64], n: usize, bit: i32) {
+    let mut s00: usize;
+
+    let plane_val: i64 = 1 << bit;
+
+    // expand each 2x2 block
+    let mut k: usize = 0; // k   is index of a[i/2,j/2]
+    let oddx = nx % 2;
+    let oddy = ny % 2;
+
+    if nx == 0 {
+        return;
+    } // Return early and prevent underflow
+
+    for i in (0..(nx - 1)).step_by(2) {
+        s00 = n * i; // s00 is index of b[i,j]
+
+        // Note:
+        // this code appears to run very slightly faster on a 32-bit linux
+        // machine using s00+n rather than the s10 intermediate variable
+
+        //		s10 = s00+n;
+        // s10 is index of b[i+1,j]
+        if ny == 0 {
+            // TODO
+            continue;
+        } // Continue early and prevent underflow
+
+        for _j in (0..(ny - 1)).step_by(2) {
+            match a[k] {
+                0 => (),
+                1 => {
+                    b[s00 + n + 1] |= plane_val;
+                }
+                2 => {
+                    b[s00 + n] |= plane_val;
+                }
+                3 => {
+                    b[s00 + n + 1] |= plane_val;
+                    b[s00 + n] |= plane_val;
+                }
+                4 => {
+                    b[s00 + 1] |= plane_val;
+                }
+                5 => {
+                    b[s00 + n + 1] |= plane_val;
+                    b[s00 + 1] |= plane_val;
+                }
+                6 => {
+                    b[s00 + n] |= plane_val;
+                    b[s00 + 1] |= plane_val;
+                }
+                7 => {
+                    b[s00 + n + 1] |= plane_val;
+                    b[s00 + n] |= plane_val;
+                    b[s00 + 1] |= plane_val;
+                }
+                8 => {
+                    b[s00] |= plane_val;
+                }
+                9 => {
+                    b[s00 + n + 1] |= plane_val;
+                    b[s00] |= plane_val;
+                }
+                10 => {
+                    b[s00 + n] |= plane_val;
+                    b[s00] |= plane_val;
+                }
+                11 => {
+                    b[s00 + n + 1] |= plane_val;
+                    b[s00 + n] |= plane_val;
+                    b[s00] |= plane_val;
+                }
+                12 => {
+                    b[s00 + 1] |= plane_val;
+                    b[s00] |= plane_val;
+                }
+                13 => {
+                    b[s00 + n + 1] |= plane_val;
+                    b[s00 + 1] |= plane_val;
+                    b[s00] |= plane_val;
+                }
+                14 => {
+                    b[s00 + n] |= plane_val;
+                    b[s00 + 1] |= plane_val;
+                    b[s00] |= plane_val;
+                }
+                15 => {
+                    b[s00 + n + 1] |= plane_val;
+                    b[s00 + n] |= plane_val;
+                    b[s00 + 1] |= plane_val;
+                    b[s00] |= plane_val;
+                }
+                _ => (),
+            }
+
+            /*
+                        b[s10+1] |= ( a[k]     & 1) << bit;
+                        b[s10  ] |= ((a[k]>>1) & 1) << bit;
+                        b[s00+1] |= ((a[k]>>2) & 1) << bit;
+                        b[s00  ] |= ((a[k]>>3) & 1) << bit;
+            */
+            s00 += 2;
+            //			s10 += 2;
+            k += 1;
+        }
+
+        if oddy > 0 {
+            // row size is odd, do last element in row
+            // s00+1, s10+1 are off edge
+
+            match a[k] {
+                2 => {
+                    b[s00 + n] |= plane_val;
+                }
+                3 => {
+                    b[s00 + n] |= plane_val;
+                }
+                6 => {
+                    b[s00 + n] |= plane_val;
+                }
+                7 => {
+                    b[s00 + n] |= plane_val;
+                }
+                8 => {
+                    b[s00] |= plane_val;
+                }
+                9 => {
+                    b[s00] |= plane_val;
+                }
+                10 => {
+                    b[s00 + n] |= plane_val;
+                    b[s00] |= plane_val;
+                }
+                11 => {
+                    b[s00 + n] |= plane_val;
+                    b[s00] |= plane_val;
+                }
+                12 => {
+                    b[s00] |= plane_val;
+                }
+                13 => {
+                    b[s00] |= plane_val;
+                }
+                14 => {
+                    b[s00 + n] |= plane_val;
+                    b[s00] |= plane_val;
+                }
+                15 => {
+                    b[s00 + n] |= plane_val;
+                    b[s00] |= plane_val;
+                }
+                _ => (),
+            }
+
+            /*
+                        b[s10  ] |= ((a[k]>>1) & 1) << bit;
+                        b[s00  ] |= ((a[k]>>3) & 1) << bit;
+            */
+            k += 1;
+        }
+    }
+
+    if oddx > 0 {
+        // column size is odd, do last row
+        // s10, s10+1 are off edge
+        s00 = n * (nx - 1);
+
+        if ny == 0 {
+            return;
+        } // Return early and prevent underflow
+
+        for _j in (0..(ny - 1)).step_by(2) {
+            match a[k] {
+                4 => {
+                    b[s00 + 1] |= plane_val;
+                }
+                5 => {
+                    b[s00 + 1] |= plane_val;
+                }
+                6 => {
+                    b[s00 + 1] |= plane_val;
+                }
+                7 => {
+                    b[s00 + 1] |= plane_val;
+                }
+                8 => {
+                    b[s00] |= plane_val;
+                }
+                9 => {
+                    b[s00] |= plane_val;
+                }
+                10 => {
+                    b[s00] |= plane_val;
+                }
+                11 => {
+                    b[s00] |= plane_val;
+                }
+                12 => {
+                    b[s00 + 1] |= plane_val;
+                    b[s00] |= plane_val;
+                }
+                13 => {
+                    b[s00 + 1] |= plane_val;
+                    b[s00] |= plane_val;
+                }
+                14 => {
+                    b[s00 + 1] |= plane_val;
+                    b[s00] |= plane_val;
+                }
+                15 => {
+                    b[s00 + 1] |= plane_val;
+                    b[s00] |= plane_val;
+                }
+                _ => (),
+            }
+
+            /*
+                        b[s00+1] |= ((a[k]>>2) & 1) << bit;
+                        b[s00  ] |= ((a[k]>>3) & 1) << bit;
+            */
+
+            s00 += 2;
+            k += 1;
+        }
+
+        if oddy > 0 {
+            // both row and column size are odd, do corner element
+            // s00+1, s10, s10+1 are off edge
+
+            match a[k] {
+                8 => {
+                    b[s00] |= plane_val;
+                }
+                9 => {
+                    b[s00] |= plane_val;
+                }
+                10 => {
+                    b[s00] |= plane_val;
+                }
+                11 => {
+                    b[s00] |= plane_val;
+                }
+                12 => {
+                    b[s00] |= plane_val;
+                }
+                13 => {
+                    b[s00] |= plane_val;
+                }
+                14 => {
+                    b[s00] |= plane_val;
+                }
+                15 => {
+                    b[s00] |= plane_val;
+                }
+                _ => (),
+            }
+
+            /*
+                        b[s00  ] |= ((a[k]>>3) & 1) << bit;
+            */
+            k += 1;
+        }
+    }
+}
+
+
+/*  ############################################################################  */
 pub fn read_bdirect(
     infile: &mut Cursor<&[u8]>,
     a: &mut [i32],
@@ -1483,7 +1765,7 @@ pub fn read_bdirect(
 /*  ############################################################################  */
 pub fn read_bdirect64(
     infile: &mut Cursor<&[u8]>,
-    a: &[i64],
+    a: &mut [i64],
     n: usize,
     nqx: usize,
     nqy: usize,
