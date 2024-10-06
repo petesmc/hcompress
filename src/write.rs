@@ -244,7 +244,6 @@ fn htrans(a: &mut [i32], nx: usize, ny: usize) -> Result<(), EncodeError> {
     Ok(())
 }
 
-
 /* ######################################################################### */
 /// H-transform of NX x NY integer imag
 ///
@@ -437,7 +436,6 @@ fn digitize(a: &mut [i32], nx: usize, ny: usize, scale: i32) {
 /// * `scale` - Scale factor
 ///
 fn digitize64(a: &mut [i64], nx: usize, ny: usize, scale: i32) {
-
     if scale <= 1 {
         return;
     };
@@ -460,7 +458,6 @@ fn digitize64(a: &mut [i64], nx: usize, ny: usize, scale: i32) {
         }
     }
 }
-
 
 /* ######################################################################### */
 /// Shuffles array by copying odd elements to tmp
@@ -500,7 +497,6 @@ fn shuffle(a: &mut [i32], n: usize, n2: usize, tmp: &mut [i32]) {
     }
 }
 
-
 /* ######################################################################### */
 /// Shuffles array by copying odd elements to tmp
 ///
@@ -538,7 +534,6 @@ fn shuffle64(a: &mut [i64], n: usize, n2: usize, tmp: &mut [i64]) {
         pt += 1;
     }
 }
-
 
 /* ######################################################################### */
 /// Performs H-Compress encoding
@@ -676,7 +671,6 @@ fn encode_work(
     stat
 }
 
-
 /* ######################################################################### */
 /// Performs H-Compress encoding
 ///
@@ -813,7 +807,6 @@ fn encode_work64(
     stat
 }
 
-
 /* ######################################################################### */
 /// Write n bytes from buffer into file.
 ///
@@ -877,7 +870,6 @@ fn writelonglong(outfile: &mut Vec<u8>, a: i64) {
         qwrite(outfile, &b[i..], 1);
     }
 }
-
 
 /// Encode 2-D array and write stream of characters on outfile
 ///
@@ -947,7 +939,6 @@ fn do_encode(
     stat
 }
 
-
 /// Encode 2-D array and write stream of characters on outfile
 ///
 /// # Arguments
@@ -1015,7 +1006,6 @@ fn do_encode64(
 
     stat
 }
-
 
 /* ######################################################################### */
 /* INITIALIZE FOR BIT OUTPUT */
@@ -1305,7 +1295,6 @@ fn qtree_encode(
     Ok(())
 }
 
-
 /// Encode values in quadrant of 2-D array using binary quadtree coding for each bit plane.  
 ///
 /// Assumes array is positive.
@@ -1450,8 +1439,6 @@ fn qtree_encode64(
     Ok(())
 }
 
-
-
 /* ######################################################################### */
 /// copy non-zero codes from array to buffer
 ///
@@ -1520,6 +1507,96 @@ fn qtree_onebit(a: &[i32], n: usize, nx: usize, ny: usize, b: &mut [u8], bit: us
     let b1: i32 = b0 << 1;
     let b2: i32 = b0 << 2;
     let b3: i32 = b0 << 3;
+    let mut k: usize = 0;
+    let mut ii = 0; /* k is index of b[i/2,j/2]	*/
+
+    if nx == 0 {
+        return;
+    } // Stops underflow and early return
+
+    for i in (0..(nx - 1)).step_by(2) {
+        s00 = n * i; /* s00 is index of a[i,j]	*/
+        s10 = s00 + n; /* s10 is index of a[i+1,j]	*/
+        let mut ji = 0;
+
+        if ny == 0 {
+            continue;
+        } // Stops underflow
+
+        for _j in (0..(ny - 1)).step_by(2) {
+            b[k] = (((a[s10 + 1] & b0)
+                | ((a[s10] << 1) & b1)
+                | ((a[s00 + 1] << 2) & b2)
+                | ((a[s00] << 3) & b3))
+                >> bit) as u8;
+
+            k += 1;
+            s00 += 2;
+            s10 += 2;
+            ji += 2;
+        }
+        if ji < ny {
+            /*
+             * row size is odd, do last element in row
+             * s00+1,s10+1 are off edge
+             */
+            b[k] = ((((a[s10] << 1) & b1) | ((a[s00] << 3) & b3)) >> bit) as u8;
+            k += 1;
+        }
+        ii += 2;
+    }
+
+    if ii < nx {
+        /*
+         * column size is odd, do last row
+         * s10,s10+1 are off edge
+         */
+        s00 = n * ii;
+        let mut ji = 0;
+
+        if ny == 0 {
+            return;
+        } // Early return, prevent underflow on next line (ny - 1)
+
+        for _j in (0..(ny - 1)).step_by(2) {
+            b[k] = ((((a[s00 + 1] << 2) & b2) | ((a[s00] << 3) & b3)) >> bit) as u8;
+            k += 1;
+            s00 += 2;
+            ji += 2;
+        }
+
+        if ji < ny {
+            /*
+             * both row and column size are odd, do corner element
+             * s00+1, s10, s10+1 are off edge
+             */
+            b[k] = (((a[s00] << 3) & b3) >> bit) as u8;
+        }
+    }
+}
+
+/// Do first quadtree reduction step on bit BIT of array A.
+///
+/// Results put into B.
+///
+/// # Arguments
+///
+/// * `a` - Array of values to encode
+/// * `n` - Number of elements in array
+/// * `nx` - Number of elements in X axis
+/// * `ny` - Number of elements in Y axis
+/// * `b` - Buffer to write to
+/// * `bit` - Bit to encode
+///
+fn qtree_onebit64(a: &[i64], n: usize, nx: usize, ny: usize, b: &mut [u8], bit: usize) {
+    let mut s10: usize;
+    let mut s00: usize;
+
+    // use selected bit to get amount to shift
+    let b0: i64 = 1 << bit;
+    let b1: i64 = b0 << 1;
+    let b2: i64 = b0 << 2;
+    let b3: i64 = b0 << 3;
     let mut k: usize = 0;
     let mut ii = 0; /* k is index of b[i/2,j/2]	*/
 
@@ -1682,6 +1759,27 @@ fn write_bdirect(
 
     // Copy A to scratch array (again!), packing 4 bits/nybble
     qtree_onebit(a, n, nqx, nqy, scratch, bit);
+
+    // write to outfile
+    output_nnybble(outfile, ((nqx + 1) / 2) * ((nqy + 1) / 2), scratch, buffer2);
+}
+
+/* ######################################################################### */
+fn write_bdirect64(
+    outfile: &mut Vec<u8>,
+    a: &[i64],
+    n: usize,
+    nqx: usize,
+    nqy: usize,
+    scratch: &mut [u8],
+    bit: usize,
+    buffer2: &mut Buffer2,
+) {
+    // Write the direct bitmap warning code
+    output_nybble(outfile, 0, buffer2);
+
+    // Copy A to scratch array (again!), packing 4 bits/nybble
+    qtree_onebit64(a, n, nqx, nqy, scratch, bit);
 
     // write to outfile
     output_nnybble(outfile, ((nqx + 1) / 2) * ((nqy + 1) / 2), scratch, buffer2);
