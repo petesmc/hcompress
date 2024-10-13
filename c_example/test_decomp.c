@@ -179,13 +179,11 @@ void test_fits_hdecompress_strange_input4() {
 
 void test_fits_hdecompress_strange_input7() {
 
-    unsigned char input[26] ={221,153,0,0,0,2,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-       
-            //int output[16];
+    unsigned char input[146] ={221,153,0,0,0,10,0,0,0,1,0,0,0,0,0,0,0,0,64,0,0,0,31,28,0,246,255,239,251,254,255,191,239,251,254,255,191,239,251,254,255,191,239,251,254,255,191,239,251,254,255,191,239,251,254,255,191,239,251,254,255,191,239,251,254,255,191,239,251,254,255,191,239,251,254,255,191,239,251,254,255,191,239,251,254,255,191,239,251,254,255,191,239,251,254,255,191,239,251,203,126,91,242,223,150,252,183,229,191,45,249,111,203,126,91,242,223,150,252,183,229,191,45,249,111,203,126,91,242,223,150,252,183,229,191,45,249,111,203,126,91,242,223,252,0,0};
     int *output;
     output = calloc(200, sizeof(int));
 
-    int expected[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 13421772};
+    int expected[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 134217727};
     int nx;
     int ny;
     int scale;
@@ -206,6 +204,37 @@ void test_fits_hdecompress_strange_input7() {
         printf("%d,", output[i]);
     }
 }
+
+void test_decomp_64bit_input1() {
+
+    unsigned char input[32] ={221,153,0,0,0,2,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,4,0,2,0,255,191,239,127,240,0,0};
+       
+            //int output[16];
+    int *output;
+    output = calloc(200, sizeof(int));
+
+    int expected[2] = {  0, 1};
+    int nx;
+    int ny;
+    int scale;
+    int status = 0;
+    int res = fits_hdecompress64(input, 0, output, &ny, &nx, &scale, &status);
+
+
+    printf("nx = %d\n", nx);
+    printf("ny = %d\n", ny);
+
+    assert(nx== 2 );
+    assert(ny == 1);
+    assert(scale == 0);
+    assert(!memcmp( output, expected, 2*sizeof(int) ));
+
+
+    for (int i=0; i<2; i++) {
+        printf("%d,", output[i]);
+    }
+}
+
 
 
 
@@ -234,7 +263,8 @@ int main_decompress() {
     //test_fits_hdecompress_strange_input3();
     //test_input_nnybble();
     //test_fits_hdecompress_strange_input4();
-    test_fits_hdecompress_strange_input7();
+    //test_fits_hdecompress_strange_input7();
+    test_decomp_64bit_input1();
 }
 
 int main() {

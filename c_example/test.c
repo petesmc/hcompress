@@ -404,11 +404,11 @@ void test_strange_input6() {
 }
 
 void test_strange_input7() {
-    int input[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 13421772};
+    int input[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 134217727};
     unsigned char output[200];
     int status = 0;
     long n_bytes = 200;
-    int res = fits_hcompress(&input, 1, 2, 0, &output, &n_bytes, &status);
+    int res = fits_hcompress(&input, 1, 10, 0, &output, &n_bytes, &status);
 
     printf("Bytes: %ld\n", n_bytes);
 
@@ -417,6 +417,19 @@ void test_strange_input7() {
     }
 }
 
+void test_64bit_input1() {
+    LONGLONG input[2] = { 0, 1};
+    unsigned char output[200];
+    int status = 0;
+    long n_bytes = 200;
+    int res = fits_hcompress64(&input, 1, 2, 0, &output, &n_bytes, &status);
+
+    printf("Bytes: %ld\n", n_bytes);
+
+    for (int i=0; i<n_bytes; i++) {
+        printf("%d,", output[i]);
+    }
+}
 
 
 void test_qtree_onebit_edge_new() {
@@ -480,7 +493,8 @@ int main() {
     //test_strange_input4();
     //test_strange_input5();
     //test_strange_input6();
-    test_strange_input7();
+    //test_strange_input7();
+    test_64bit_input1();
    //test_qtree_onebit_edge_new();
 /*
     int idata[20] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19};

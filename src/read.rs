@@ -7,7 +7,7 @@ use crate::CODE_MAGIC;
 
 fn ffpmsg(_m: &str) {}
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum DecodeError {
     BadBitPlaneValues,
     MemoryAllocationError,
@@ -600,8 +600,10 @@ fn unshuffle64(a: &mut [i64], n: usize, n2: usize, tmp: &mut [i64]) {
     p1 = (n2 * (nhalf - 1)) << 1; // pointer to a[2*i]
     for _i in (0..nhalf).rev() {
         a[p1] = a[p2];
-        p2 -= n2;
-        p1 -= n2 + n2;
+        if _i > 0 {
+            p2 -= n2;
+            p1 -= n2 + n2;
+        }
     }
 
     // now distribute 2nd half of array (in tmp) to odd elements
@@ -2729,6 +2731,45 @@ mod tests {
                 127, 223, 247, 253, 255, 127, 223, 247, 253, 255, 127, 192, 128
             ]
         );
+    }
+
+    // Original code fails and has a bad format code
+    #[test]
+    fn test_fits_decompress_strange7() {
+        let input: [u8; 146] = [
+            221, 153, 0, 0, 0, 10, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 31, 28, 0, 246,
+            255, 239, 251, 254, 255, 191, 239, 251, 254, 255, 191, 239, 251, 254, 255, 191, 239,
+            251, 254, 255, 191, 239, 251, 254, 255, 191, 239, 251, 254, 255, 191, 239, 251, 254,
+            255, 191, 239, 251, 254, 255, 191, 239, 251, 254, 255, 191, 239, 251, 254, 255, 191,
+            239, 251, 254, 255, 191, 239, 251, 254, 255, 191, 239, 251, 254, 255, 191, 239, 251,
+            254, 255, 191, 239, 251, 203, 126, 91, 242, 223, 150, 252, 183, 229, 191, 45, 249, 111,
+            203, 126, 91, 242, 223, 150, 252, 183, 229, 191, 45, 249, 111, 203, 126, 91, 242, 223,
+            150, 252, 183, 229, 191, 45, 249, 111, 203, 126, 91, 242, 223, 252, 0, 0,
+        ];
+        let mut output: Vec<i32> = vec![0; 10];
+        let mut decoder = HCDecoder::new();
+        let res = decoder.read(&input, 0, &mut output);
+
+        assert!(res.is_err());
+        assert!(res.unwrap_err() == DecodeError::BadFormatCode);
+    }
+
+    #[test]
+    fn test_decomp_64bit_input1() {
+        let input: [u8; 32] = [
+            221,153,0,0,0,2,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,4,0,2,0,255,191,239,127,240,0,0
+        ];
+        let mut output: Vec<i64> = vec![0; 2];
+        let mut decoder = HCDecoder::new();
+        let res = decoder.read64(&input, 0, &mut output).unwrap();
+
+        assert_eq!(res.0, 2);
+        assert_eq!(res.1, 1);
+        assert_eq!(res.2, 0);
+
+        assert_eq!(output.len(), 2);
+
+        assert_eq!(output, [0, 1]);
     }
 
     #[test]

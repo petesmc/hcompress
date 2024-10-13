@@ -42,6 +42,8 @@ impl HCEncoder {
     /// NOTE: the nx and ny dimensions as defined within this code are reversed from
     /// the usual FITS notation.  ny is the fastest varying dimension, which is
     /// usually considered the X axis in the FITS image display
+    ///
+    /// NOTE: The input data i32 is a i16 number padded to a i32 number.
     pub fn write(
         &self,
         a: &mut [i32],
@@ -1453,7 +1455,7 @@ fn qtree_encode64(
 ///
 /// # Returns
 ///
-/// flase if successful, true if buffer is full
+/// false if successful, true if buffer is full
 fn bufcopy(
     a: &[u8],
     n: usize,
@@ -1987,19 +1989,48 @@ mod tests {
         );
     }
 
-    /// ORIGINAL LIBRARY fails to encode and then decode this input
+    // ORIGINAL LIBRARY fails to encode and then decode this input
+    // The compression will work, but there is UB
     fn test_fits_compress_strange_input7() {
-        let mut input: [i32; 10] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 13421772];
+        let mut input: [i32; 10] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 134217727];
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
         let encoder = HCEncoder::new();
-        let _res = encoder.write(&mut input, 10, 1, 0, &mut output);
+        let _res = encoder.write(&mut input, 1, 10, 0, &mut output);
 
-        assert_eq!(output.len(), 26);
+        assert_eq!(output.len(), 146);
 
         assert_eq!(
             output,
-            [221, 153, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            [
+                221, 153, 0, 0, 0, 10, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 31, 28, 0,
+                246, 255, 239, 251, 254, 255, 191, 239, 251, 254, 255, 191, 239, 251, 254, 255,
+                191, 239, 251, 254, 255, 191, 239, 251, 254, 255, 191, 239, 251, 254, 255, 191,
+                239, 251, 254, 255, 191, 239, 251, 254, 255, 191, 239, 251, 254, 255, 191, 239,
+                251, 254, 255, 191, 239, 251, 254, 255, 191, 239, 251, 254, 255, 191, 239, 251,
+                254, 255, 191, 239, 251, 254, 255, 191, 239, 251, 203, 126, 91, 242, 223, 150, 252,
+                183, 229, 191, 45, 249, 111, 203, 126, 91, 242, 223, 150, 252, 183, 229, 191, 45,
+                249, 111, 203, 126, 91, 242, 223, 150, 252, 183, 229, 191, 45, 249, 111, 203, 126,
+                91, 242, 223, 252, 0, 0
+            ]
+        );
+    }
+
+    #[test]
+    fn test_64bit_input1() {
+        let mut input: [i64; 2] = [ 0, 1];
+        let mut output: Vec<u8> = Vec::with_capacity(200);
+
+        let encoder = HCEncoder::new();
+        let _res = encoder.write64(&mut input, 1, 2, 0, &mut output);
+
+        assert_eq!(output.len(), 32);
+
+        assert_eq!(
+            output,
+            [
+                221,153,0,0,0,2,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,4,0,2,0,255,191,239,127,240,0,0
+            ]
         );
     }
 
