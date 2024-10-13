@@ -1,14 +1,14 @@
+use crate::CODE_MAGIC;
+
 fn ffpmsg(_m: &str) {}
 
-/// Huffman code values and 
+/// Huffman code values and
 const CODE: [i32; 16] = [
     0x3e, 0x00, 0x01, 0x08, 0x02, 0x09, 0x1a, 0x1b, 0x03, 0x1c, 0x0a, 0x1d, 0x0b, 0x1e, 0x3f, 0x0c,
 ];
 
 /// Number of bits in each code
 const NCODE: [i32; 16] = [6, 3, 3, 4, 3, 4, 5, 5, 3, 5, 4, 5, 4, 5, 6, 4];
-
-const CODE_MAGIC: [u8; 2] = [0xDD, 0x99];
 
 #[derive(Debug)]
 pub enum EncodeError {
@@ -42,7 +42,7 @@ impl HCEncoder {
     /// NOTE: the nx and ny dimensions as defined within this code are reversed from
     /// the usual FITS notation.  ny is the fastest varying dimension, which is
     /// usually considered the X axis in the FITS image display
-    pub fn encode(
+    pub fn write(
         &self,
         a: &mut [i32],
         ny: usize,
@@ -58,7 +58,7 @@ impl HCEncoder {
 
         // encode and write to output array
         // input value is the allocated size of the array
-        encode_work(output, a, nx, ny, scale)
+        encode(output, a, nx, ny, scale)
     }
 
     /* ---------------------------------------------------------------------- */
@@ -75,7 +75,7 @@ impl HCEncoder {
     /// NOTE: the nx and ny dimensions as defined within this code are reversed from
     /// the usual FITS notation.  ny is the fastest varying dimension, which is
     /// usually considered the X axis in the FITS image display
-    pub fn encode64(
+    pub fn write64(
         &self,
         a: &mut [i64],
         ny: usize,
@@ -91,7 +91,7 @@ impl HCEncoder {
 
         // encode and write to output array
         // input value is the allocated size of the array
-        encode_work64(output, a, nx, ny, scale)
+        encode64(output, a, nx, ny, scale)
     }
 }
 
@@ -546,7 +546,7 @@ fn shuffle64(a: &mut [i64], n: usize, n2: usize, tmp: &mut [i64]) {
 /// * `ny` - size of H-transform array
 /// * `scale` - scale factor for digitization
 ///
-fn encode_work(
+fn encode(
     outfile: &mut Vec<u8>,
     a: &mut [i32],
     nx: usize,
@@ -682,7 +682,7 @@ fn encode_work(
 /// * `ny` - size of H-transform array
 /// * `scale` - scale factor for digitization
 ///
-fn encode_work64(
+fn encode64(
     outfile: &mut Vec<u8>,
     a: &mut [i64],
     nx: usize,
@@ -1815,7 +1815,7 @@ mod tests {
         let mut output: Vec<u8> = Vec::with_capacity(16);
 
         let encoder = HCEncoder::new();
-        let _res = encoder.encode(&mut input, 4, 4, 0, &mut output);
+        let _res = encoder.write(&mut input, 4, 4, 0, &mut output);
 
         assert_eq!(output.len(), 48);
         assert_eq!(
@@ -1839,7 +1839,7 @@ mod tests {
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
         let encoder = HCEncoder::new();
-        let _res = encoder.encode(&mut input, 1, 10, 0, &mut output);
+        let _res = encoder.write(&mut input, 1, 10, 0, &mut output);
         println!("{:#?}", output);
         assert_eq!(output.len(), 101);
 
@@ -1864,7 +1864,7 @@ mod tests {
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
         let encoder = HCEncoder::new();
-        let _res = encoder.encode(&mut input, 1, 12, 0, &mut output);
+        let _res = encoder.write(&mut input, 1, 12, 0, &mut output);
 
         assert_eq!(output.len(), 106);
 
@@ -1890,7 +1890,7 @@ mod tests {
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
         let encoder = HCEncoder::new();
-        let _res = encoder.encode(&mut input, 1, 16, 0, &mut output);
+        let _res = encoder.write(&mut input, 1, 16, 0, &mut output);
 
         assert_eq!(output.len(), 140);
 
@@ -1920,7 +1920,7 @@ mod tests {
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
         let encoder = HCEncoder::new();
-        let _res = encoder.encode(&mut input, 1, 82, 0, &mut output);
+        let _res = encoder.write(&mut input, 1, 82, 0, &mut output);
 
         assert_eq!(output.len(), 154);
 
@@ -1946,7 +1946,7 @@ mod tests {
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
         let encoder = HCEncoder::new();
-        let _res = encoder.encode(&mut input, 10, 1, 0, &mut output);
+        let _res = encoder.write(&mut input, 10, 1, 0, &mut output);
 
         assert_eq!(output.len(), 104);
 
@@ -1971,7 +1971,7 @@ mod tests {
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
         let encoder = HCEncoder::new();
-        let _res = encoder.encode(&mut input, 10, 1, 0, &mut output);
+        let _res = encoder.write(&mut input, 10, 1, 0, &mut output);
 
         assert_eq!(output.len(), 84);
 
