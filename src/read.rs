@@ -1,4 +1,4 @@
-use std::io::{self, Cursor, Read};
+use std::io::Cursor;
 
 use bytemuck::cast_slice_mut;
 use bytes::Buf;
@@ -15,7 +15,7 @@ pub enum DecodeError {
     BadFileFormat,
 }
 
-/* THE BIT BUFFER */
+/// The bit buffer
 struct Buffer2 {
     pub buffer2: i32,    // Bits waiting to be input
     pub bits_to_go: i32, // Number of bits still in buffer
@@ -23,8 +23,13 @@ struct Buffer2 {
 
 pub struct HCDecoder {}
 
-impl HCDecoder {
+impl Default for HCDecoder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
+impl HCDecoder {
     pub fn new() -> Self {
         Self {}
     }
@@ -42,7 +47,8 @@ impl HCDecoder {
     /// NOTE: the nx and ny dimensions as defined within this code are reversed from
     /// the usual FITS notation.  ny is the fastest varying dimension, which is
     /// usually considered the X axis in the FITS image display
-    pub fn read(&mut self,
+    pub fn read(
+        &mut self,
         inputz: &[u8],
         smooth: i32,
         a: &mut [i32],
@@ -78,7 +84,8 @@ impl HCDecoder {
     /// NOTE: the nx and ny dimensions as defined within this code are reversed from
     /// the usual FITS notation.  ny is the fastest varying dimension, which is
     /// usually considered the X axis in the FITS image display
-    pub fn read64(&mut self, 
+    pub fn read64(
+        &mut self,
         inputz: &[u8],
         smooth: i32,
         a: &mut [i64],
@@ -98,13 +105,18 @@ impl HCDecoder {
             return Err(stat.unwrap_err());
         }
 
-        /* pack the I*8 values back into an I*4 array */
-        let iarray: &mut [i32] = cast_slice_mut(a);
+        // pack the I*8 values back into an I*4 array
+        // Original code it does the conversion in place, but rust struggle with the borrow
         let nval = (nx) * (ny);
+        let mut iarray = Vec::with_capacity(nval);
 
         for ii in 0..nval {
-            // iarray[ii] = a[ii] as i32;
+            iarray.push(a[ii] as i32);
         }
+
+        // Put back into A
+        let a_int: &mut [i32] = cast_slice_mut(a);
+        a_int[..nval].copy_from_slice(&iarray[..nval]);
 
         Ok((nx, ny, scale))
     }
@@ -311,7 +323,7 @@ fn hinv(a: &mut [i32], nx: usize, ny: usize, smooth: i32, scale: i32) -> Result<
         nrnd0 = prnd0 - 1;
     }
 
-    return Ok(());
+    Ok(())
 }
 
 /*  ############################################################################  */
@@ -515,7 +527,7 @@ fn hinv64(a: &mut [i64], nx: usize, ny: usize, smooth: i32, scale: i32) -> Resul
         nrnd0 = prnd0 - 1;
     }
 
-    return Ok(());
+    Ok(())
 }
 
 /*  ############################################################################  */
@@ -1067,7 +1079,7 @@ fn decode64(infile: &mut Cursor<&[u8]>, a: &mut [i64]) -> Result<(usize, usize, 
     let stat = dodecode64(infile, a, nx, ny, nbitplanes);
 
     // put sum of all pixels back into pixel 0
-    a[0] = sumall as i64;
+    a[0] = sumall;
 
     match stat {
         Ok(_) => Ok((nx, ny, scale)),
@@ -1155,7 +1167,7 @@ fn dodecode(
             }
         }
     }
-    return Ok(());
+    Ok(())
 }
 
 /*  ############################################################################  */
@@ -1230,13 +1242,11 @@ fn dodecode64(
     // Re-initialize bit input
     let mut b2 = start_inputing_bits();
     for item in a.iter_mut().take(nel) {
-        if *item > 0 {
-            if input_bit(infile, &mut b2) > 0 {
-                *item = -*item;
-            }
+        if *item > 0 && input_bit(infile, &mut b2) > 0 {
+            *item = -*item;
         }
     }
-    return Ok(());
+    Ok(())
 }
 
 /*  ############################################################################  */
@@ -2495,7 +2505,6 @@ fn input_nnybble(infile: &mut Cursor<&[u8]>, n: usize, array: &mut [u8], b2: &mu
 
 #[cfg(test)]
 mod tests {
-    use crate::write::HCEncoder;
 
     use super::*;
     #[test]
@@ -2751,7 +2760,7 @@ mod tests {
         let smooth = 0;
         let scale = 0;
 
-        let _res = hinv(&mut a[0..], nx, ny, smooth, scale).unwrap();
+        hinv(&mut a[0..], nx, ny, smooth, scale).unwrap();
 
         assert_eq!(a, [2, 2, 1, 2, 3, 2, 7, 7, 4, 2, 2, 1, 2, 4, 25, 2]);
     }

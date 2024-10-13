@@ -704,7 +704,7 @@ fn encode64(
     write first value of A (sum of all pixels -- the only value
     which does not compress well)
      */
-    writelonglong(outfile, i64::from(a[0]));
+    writelonglong(outfile, a[0]);
 
     a[0] = 0;
 
@@ -1984,6 +1984,22 @@ mod tests {
                 255, 191, 239, 251, 219, 127, 247, 253, 255, 127, 222, 219, 246, 223, 253, 255,
                 127, 223, 247, 253, 255, 127, 223, 247, 253, 255, 127, 192, 128
             ]
+        );
+    }
+
+    /// ORIGINAL LIBRARY fails to encode and then decode this input
+    fn test_fits_compress_strange_input7() {
+        let mut input: [i32; 10] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 13421772];
+        let mut output: Vec<u8> = Vec::with_capacity(200);
+
+        let encoder = HCEncoder::new();
+        let _res = encoder.write(&mut input, 10, 1, 0, &mut output);
+
+        assert_eq!(output.len(), 26);
+
+        assert_eq!(
+            output,
+            [221, 153, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         );
     }
 
