@@ -33,3 +33,10 @@ name = "fuzz_target_3"
 path = "fuzz_targets/fuzz_target_3.rs"
 test = false
 doc = false
+
+
+[[bin]]
+name = "fuzz_target_64bit"
+path = "fuzz_targets/fuzz_target_64bit.rs"
+test = false
+doc = false

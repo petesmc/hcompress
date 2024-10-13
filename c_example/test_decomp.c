@@ -177,6 +177,38 @@ void test_fits_hdecompress_strange_input4() {
     }
 }
 
+void test_fits_hdecompress_strange_input7() {
+
+    unsigned char input[26] ={221,153,0,0,0,2,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+       
+            //int output[16];
+    int *output;
+    output = calloc(200, sizeof(int));
+
+    int expected[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 13421772};
+    int nx;
+    int ny;
+    int scale;
+    int status = 0;
+    int res = fits_hdecompress(input, 0, output, &ny, &nx, &scale, &status);
+
+
+    printf("nx = %d\n", nx);
+    printf("ny = %d\n", ny);
+
+    assert(nx== 10 );
+    assert(ny == 1);
+    assert(scale == 0);
+    assert(!memcmp( output, expected, 10*sizeof(int) ));
+
+
+    for (int i=0; i<10; i++) {
+        printf("%d,", output[i]);
+    }
+}
+
+
+
 void test_input_nnybble() {
     int n = 4;
     unsigned char array[4] = {0,10,8,0};
@@ -201,7 +233,8 @@ int main_decompress() {
     //test_fits_hdecompress();
     //test_fits_hdecompress_strange_input3();
     //test_input_nnybble();
-    test_fits_hdecompress_strange_input4();
+    //test_fits_hdecompress_strange_input4();
+    test_fits_hdecompress_strange_input7();
 }
 
 int main() {
