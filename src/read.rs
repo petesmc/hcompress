@@ -2757,16 +2757,18 @@ mod tests {
     #[test]
     fn test_decomp_64bit_input1() {
         let input: [u8; 32] = [
-            221,153,0,0,0,2,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,4,0,2,0,255,191,239,127,240,0,0
+            221, 153, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 2, 0, 255,
+            191, 239, 127, 240, 0, 0,
         ];
         let mut output: Vec<i32> = vec![0; 4];
         let mut decoder = HCDecoder::new();
-        let res = decoder.read64(&input, 0, cast_slice_mut(&mut output)).unwrap();
+        let res = decoder
+            .read64(&input, 0, cast_slice_mut(&mut output))
+            .unwrap();
 
         assert_eq!(res.0, 2);
         assert_eq!(res.1, 1);
         assert_eq!(res.2, 0);
-
 
         assert_eq!(output[..2], [0, 1]);
     }

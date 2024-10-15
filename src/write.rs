@@ -2018,7 +2018,7 @@ mod tests {
 
     #[test]
     fn test_64bit_input1() {
-        let mut input: [i64; 2] = [ 0, 1];
+        let mut input: [i64; 2] = [0, 1];
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
         let encoder = HCEncoder::new();
@@ -2029,7 +2029,8 @@ mod tests {
         assert_eq!(
             output,
             [
-                221,153,0,0,0,2,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,4,0,2,0,255,191,239,127,240,0,0
+                221, 153, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 2, 0, 255,
+                191, 239, 127, 240, 0, 0
             ]
         );
     }
