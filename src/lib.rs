@@ -29,7 +29,7 @@ mod tests {
 
     quickcheck! {
         fn encode_decode_32bit(input_data: Vec<i16>) -> TestResult {
-            let mut d = input_data.iter().map(|&x| x as i32).collect::<Vec<i32>>();
+            let d = input_data.iter().map(|&x| x as i32).collect::<Vec<i32>>();
             let mut input: Vec<i32> = d.clone();
 
             let y = 1;
@@ -41,7 +41,7 @@ mod tests {
             }
 
             let mut compressed: Vec<u8> = Vec::with_capacity(x * y * 100);
-            let mut encoder = crate::write::HCEncoder::new();
+            let encoder = crate::write::HCEncoder::new();
 
             let res = encoder.write(&mut input, y, x, scale, &mut compressed);
 
@@ -58,7 +58,7 @@ mod tests {
 
 
         fn encode_decode_64bit(input_data: Vec<i32>) -> TestResult {
-            let mut d = input_data.iter().map(|&x| x as i64).collect::<Vec<i64>>();
+            let d = input_data.iter().map(|&x| x as i64).collect::<Vec<i64>>();
             let mut input: Vec<i64> = d.clone();
 
             let y = 1;
@@ -70,7 +70,7 @@ mod tests {
             }
 
             let mut compressed: Vec<u8> = Vec::with_capacity(x * y * 100);
-            let mut encoder = crate::write::HCEncoder::new();
+            let encoder = crate::write::HCEncoder::new();
 
             let res = encoder.write64(&mut input, y, x, scale, &mut compressed);
 
