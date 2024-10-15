@@ -218,24 +218,28 @@ void test_decomp_64bit_input1() {
     int ny;
     int scale;
     int status = 0;
-    int res = fits_hdecompress64(input, 0, output, &ny, &nx, &scale, &status);
+    int res = fits_hdecompress64(input, 0, (LONGLONG *) output, &ny, &nx, &scale, &status);
 
 
     printf("nx = %d\n", nx);
     printf("ny = %d\n", ny);
+    printf("\n");
+
+    for (int i=0; i<2; i++) {
+        printf("%d,", output[i]);
+    }
+
+    printf("\n");
+
+    //fflush(stdout);
 
     assert(nx== 2 );
     assert(ny == 1);
     assert(scale == 0);
     assert(!memcmp( output, expected, 2*sizeof(int) ));
 
-
-    for (int i=0; i<2; i++) {
-        printf("%d,", output[i]);
-    }
+   
 }
-
-
 
 
 void test_input_nnybble() {

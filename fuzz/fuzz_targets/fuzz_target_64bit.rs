@@ -1,5 +1,6 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
+use bytemuck::cast_slice_mut;
 extern crate hcompress;
 use crate::hcompress::*;
 
@@ -18,9 +19,9 @@ fuzz_target!(|data: Data32| {
 
     let res = encoder.write64(&mut input, y, x, scale, &mut compressed);
 
-    let mut uncompressed: Vec<i64> = vec![0;x*y];
+    let mut uncompressed: Vec<i32> = vec![0;x*y*2];
     let mut decoder = hcompress::read::HCDecoder::new();
-    let res = decoder.read64(&compressed, 0, &mut uncompressed);
+    let res = decoder.read64(&compressed, 0, cast_slice_mut(&mut uncompressed));
 
-    assert_eq!(d, uncompressed);
+    assert_eq!(data.d, uncompressed[..(x*y)]);
 });

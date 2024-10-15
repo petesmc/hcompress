@@ -11,7 +11,7 @@
                 "-o",
                 "${fileDirname}/${fileBasenameNoExtension}",
                 "-lm",
-                "-lcriterion"
+                //"-lcriterion"
             ],
             "options": {
                 "cwd": "${fileDirname}"

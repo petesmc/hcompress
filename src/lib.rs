@@ -22,6 +22,7 @@ pub struct Data32 {
 #[cfg(test)]
 mod tests {
 
+    use bytemuck::cast_slice_mut;
     use quickcheck::TestResult;
 
     use super::*;
@@ -73,11 +74,11 @@ mod tests {
 
             let res = encoder.write64(&mut input, y, x, scale, &mut compressed);
 
-            let mut uncompressed: Vec<i64> = vec![0; x * y];
+            let mut uncompressed: Vec<i32> = vec![0; x * y * 2];
             let mut decoder = crate::read::HCDecoder::new();
-            let res = decoder.read64(&compressed, 0, &mut uncompressed);
+            let res = decoder.read64(&compressed, 0, cast_slice_mut(&mut uncompressed));
 
-            if d == uncompressed {
+            if input_data == uncompressed[..(x*y)] {
                 return TestResult::passed();
             } else {
                 return TestResult::failed();

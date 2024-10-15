@@ -9,7 +9,9 @@ edition = "2018"
 cargo-fuzz = true
 
 [dependencies]
-libfuzzer-sys = "0.4"
+libfuzzer-sys = "*"
+bytemuck = "1.19.0"
+
 hcompress = { path = "..", features = ["arbitrary"] }
 
 # Prevent this from interfering with workspaces
