@@ -15,3 +15,4 @@ https://fits.gsfc.nasa.gov/registry/tilecompression/tilecompression2.3.pdf
 Original Library
 https://www.stsci.edu/software/hcompress.html
 
+NOTE: The non-'64' functions support shorts padded to int, and the '64' functions support int padded to long, as per the original implementation.
