@@ -129,11 +129,11 @@ fn htrans(a: &mut [i32], nx: usize, ny: usize) -> Result<(), EncodeError> {
 
     // get temporary storage for shuffling elements
     let mut tmp: Vec<i32> = Vec::new();
-    if tmp.try_reserve_exact((nmax + 1) / 2).is_err() {
+    if tmp.try_reserve_exact(nmax.div_ceil(2)).is_err() {
         ffpmsg("htrans: insufficient memory");
         return Err(EncodeError::DataCompressionError);
     } else {
-        tmp.resize((nmax + 1) / 2, 0);
+        tmp.resize(nmax.div_ceil(2), 0);
     }
 
     // set up rounding and shifting masks
@@ -576,11 +576,11 @@ fn encode(
 
     // allocate array for sign bits and save values, 8 per byte (initialize to all zeros)
     let mut signbits: Vec<u8> = Vec::new();
-    if signbits.try_reserve_exact((nel + 7) / 8).is_err() {
+    if signbits.try_reserve_exact(nel.div_ceil(8)).is_err() {
         ffpmsg("encode: insufficient memory");
         return Err(EncodeError::DataCompressionError);
     } else {
-        signbits.resize((nel + 7) / 8, 0);
+        signbits.resize(nel.div_ceil(8), 0);
     }
 
     let mut nsign = 0;
@@ -628,8 +628,8 @@ fn encode(
     vmax.iter_mut().for_each(|x| *x = 0);
 
     // get maximum absolute value in each quadrant
-    let nx2 = (nx + 1) / 2;
-    let ny2 = (ny + 1) / 2;
+    let nx2 = nx.div_ceil(2);
+    let ny2 = ny.div_ceil(2);
     let mut j = 0; /* column counter	*/
     let mut k = 0; /* row counter		*/
     for i in 0..nel {
@@ -712,11 +712,11 @@ fn encode64(
 
     // allocate array for sign bits and save values, 8 per byte (initialize to all zeros)
     let mut signbits: Vec<u8> = Vec::new();
-    if signbits.try_reserve_exact((nel + 7) / 8).is_err() {
+    if signbits.try_reserve_exact(nel.div_ceil(8)).is_err() {
         ffpmsg("encode64: insufficient memory");
         return Err(EncodeError::DataCompressionError);
     } else {
-        signbits.resize((nel + 7) / 8, 0);
+        signbits.resize(nel.div_ceil(8), 0);
     }
 
     let mut nsign = 0;
@@ -1763,7 +1763,7 @@ fn write_bdirect(
     qtree_onebit(a, n, nqx, nqy, scratch, bit);
 
     // write to outfile
-    output_nnybble(outfile, ((nqx + 1) / 2) * ((nqy + 1) / 2), scratch, buffer2);
+    output_nnybble(outfile, nqx.div_ceil(2) * nqy.div_ceil(2), scratch, buffer2);
 }
 
 /* ######################################################################### */

@@ -164,7 +164,7 @@ fn hinv(a: &mut [i32], nx: usize, ny: usize, smooth: i32, scale: i32) -> Result<
     let mut shift = 1;
     let mut bit0 = 1 << (log2n - 1);
     let mut bit1 = bit0 << 1;
-    let mut bit2 = bit0 << 2;
+    let bit2 = bit0 << 2;
     let mut mask0 = -bit0;
     let mut mask1 = mask0 << 1;
     let mask2 = mask0 << 2;
@@ -368,7 +368,7 @@ fn hinv64(a: &mut [i64], nx: usize, ny: usize, smooth: i32, scale: i32) -> Resul
     let mut shift = 1;
     let mut bit0 = 1 << (log2n - 1);
     let mut bit1 = bit0 << 1;
-    let mut bit2 = bit0 << 2;
+    let bit2 = bit0 << 2;
     let mut mask0 = -bit0;
     let mut mask1 = mask0 << 1;
     let mask2 = mask0 << 2;
