@@ -64,9 +64,7 @@ impl HCDecoder {
         // Inverse H-transform
         let stat = hinv(a, nx, ny, smooth, scale);
 
-        if stat.is_err() {
-            return Err(stat.unwrap_err());
-        }
+        stat?;
 
         Ok((nx, ny, scale))
     }
@@ -101,18 +99,16 @@ impl HCDecoder {
         // Inverse H-transform
         let stat = hinv64(a, nx, ny, smooth, scale);
 
-        if stat.is_err() {
-            return Err(stat.unwrap_err());
-        }
+        stat?;
 
         // pack the I*8 values back into an I*4 array
         // Original code it does the conversion in place, but rust struggle with the borrow
         let nval = (nx) * (ny);
         let mut iarray = Vec::with_capacity(nval);
 
-        for ii in 0..nval {
-            iarray.push(a[ii] as i32);
-        }
+        a.iter().take(nval).for_each(|&x| {
+            iarray.push(x as i32);
+        });
 
         // Put back into A
         let a_int: &mut [i32] = cast_slice_mut(a);
@@ -157,11 +153,11 @@ fn hinv(a: &mut [i32], nx: usize, ny: usize, smooth: i32, scale: i32) -> Result<
 
     // get temporary storage for shuffling elements
     let mut tmp: Vec<i32> = Vec::new();
-    if tmp.try_reserve_exact((nmax + 1) / 2).is_err() {
+    if tmp.try_reserve_exact(nmax.div_ceil(2)).is_err() {
         ffpmsg("hinv: insufficient memory");
         return Err(DecodeError::MemoryAllocationError);
     } else {
-        tmp.resize((nmax + 1) / 2, 0);
+        tmp.resize(nmax.div_ceil(2), 0);
     }
 
     // set up masks, rounding parameters
@@ -312,7 +308,7 @@ fn hinv(a: &mut [i32], nx: usize, ny: usize, smooth: i32, scale: i32) -> Result<
         }
 
         // divide all the masks and rounding values by 2
-        bit2 = bit1;
+        // bit2 = bit1;
         bit1 = bit0;
         bit0 >>= 1;
         mask1 = mask0;
@@ -361,11 +357,11 @@ fn hinv64(a: &mut [i64], nx: usize, ny: usize, smooth: i32, scale: i32) -> Resul
 
     // get temporary storage for shuffling elements
     let mut tmp: Vec<i64> = Vec::new();
-    if tmp.try_reserve_exact((nmax + 1) / 2).is_err() {
+    if tmp.try_reserve_exact(nmax.div_ceil(2)).is_err() {
         ffpmsg("hinv64: insufficient memory");
         return Err(DecodeError::MemoryAllocationError);
     } else {
-        tmp.resize((nmax + 1) / 2, 0);
+        tmp.resize(nmax.div_ceil(2), 0);
     }
 
     // set up masks, rounding parameters
@@ -516,7 +512,7 @@ fn hinv64(a: &mut [i64], nx: usize, ny: usize, smooth: i32, scale: i32) -> Resul
         }
 
         // divide all the masks and rounding values by 2
-        bit2 = bit1;
+        // bit2 = bit1;
         bit1 = bit0;
         bit0 >>= 1;
         mask1 = mask0;
@@ -1107,8 +1103,8 @@ fn dodecode(
     nbitplanes: [u8; 3],
 ) -> Result<(), DecodeError> {
     let nel = nx * ny;
-    let nx2 = (nx + 1) / 2;
-    let ny2 = (ny + 1) / 2;
+    let nx2 = nx.div_ceil(2);
+    let ny2 = ny.div_ceil(2);
 
     // initialize a to zero
     a.iter_mut().take(nel).for_each(|x| *x = 0);
@@ -1190,8 +1186,8 @@ fn dodecode64(
     nbitplanes: [u8; 3],
 ) -> Result<(), DecodeError> {
     let nel = nx * ny;
-    let nx2 = (nx + 1) / 2;
-    let ny2 = (ny + 1) / 2;
+    let nx2 = nx.div_ceil(2);
+    let ny2 = ny.div_ceil(2);
 
     // initialize a to zero
     a.iter_mut().take(nel).for_each(|x| *x = 0);
@@ -1287,8 +1283,8 @@ fn qtree_decode(
     }
 
     // allocate scratch array for working space
-    let nqx2 = (nqx + 1) / 2;
-    let nqy2 = (nqy + 1) / 2;
+    let nqx2 = nqx.div_ceil(2);
+    let nqy2 = nqy.div_ceil(2);
 
     let mut scratch: Vec<u8> = Vec::new();
     let scratch_len = (nqx2 + 1) * (nqy2 + 1);
@@ -1388,8 +1384,8 @@ fn qtree_decode64(
     }
 
     // allocate scratch array for working space
-    let nqx2 = (nqx + 1) / 2;
-    let nqy2 = (nqy + 1) / 2;
+    let nqx2 = nqx.div_ceil(2);
+    let nqy2 = nqy.div_ceil(2);
 
     let mut scratch: Vec<u8> = Vec::new();
     let scratch_len = (nqx2 + 1) * (nqy2 + 1);
@@ -1483,8 +1479,8 @@ fn qtree_copy(a: &mut [u8], nx: usize, ny: usize, n: usize)
 
     // first copy 4-bit values to b
     // start at end in case a,b are same array
-    let nx2 = (nx + 1) / 2;
-    let ny2 = (ny + 1) / 2;
+    let nx2 = nx.div_ceil(2);
+    let ny2 = ny.div_ceil(2);
 
     let mut k = ny2 * (nx2 - 1) + ny2; // k   is index of a[i,j]
     for i in (0..nx2).rev() {
@@ -2239,7 +2235,7 @@ fn read_bdirect(
     b2: &mut Buffer2,
 ) {
     // read bit image packed 4 pixels/nybble
-    input_nnybble(infile, ((nqx + 1) / 2) * ((nqy + 1) / 2), scratch, b2);
+    input_nnybble(infile, nqx.div_ceil(2) * nqy.div_ceil(2), scratch, b2);
 
     // insert in bitplane BIT of image A
     qtree_bitins(scratch, nqx, nqy, a, n, bit);
@@ -2257,7 +2253,7 @@ fn read_bdirect64(
     b2: &mut Buffer2,
 ) {
     // read bit image packed 4 pixels/nybble
-    input_nnybble(infile, ((nqx + 1) / 2) * ((nqy + 1) / 2), scratch, b2);
+    input_nnybble(infile, nqx.div_ceil(2) * nqy.div_ceil(2), scratch, b2);
 
     // insert in bitplane BIT of image A
     qtree_bitins64(scratch, nqx, nqy, a, n, bit);
@@ -2270,13 +2266,13 @@ fn read_bdirect64(
 ///
 /// Huffman code values (hex):
 ///
-///	3e, 00, 01, 08, 02, 09, 1a, 1b,
-///	03, 1c, 0a, 1d, 0b, 1e, 3f, 0c
+/// 3e, 00, 01, 08, 02, 09, 1a, 1b,
+/// 03, 1c, 0a, 1d, 0b, 1e, 3f, 0c
 ///
 /// and number of bits in each code:
 ///
-///	6,  3,  3,  4,  3,  4,  5,  5,
-///	3,  5,  4,  5,  4,  5,  6,  4
+/// 6,  3,  3,  4,  3,  4,  5,  5,
+/// 3,  5,  4,  5,  4,  5,  6,  4
 ///
 fn input_huffman(infile: &mut Cursor<&[u8]>, b2: &mut Buffer2) -> i32 {
     // get first 3 bits to start

@@ -43,11 +43,11 @@ mod tests {
             let mut compressed: Vec<u8> = Vec::with_capacity(x * y * 100);
             let encoder = crate::write::HCEncoder::new();
 
-            let res = encoder.write(&mut input, y, x, scale, &mut compressed);
+            let _ = encoder.write(&mut input, y, x, scale, &mut compressed);
 
             let mut uncompressed: Vec<i32> = vec![0; x * y];
             let mut decoder = crate::read::HCDecoder::new();
-            let res = decoder.read(&compressed, 0, &mut uncompressed);
+            let _ = decoder.read(&compressed, 0, &mut uncompressed);
 
             if d == uncompressed {
                 return TestResult::passed();
@@ -72,11 +72,11 @@ mod tests {
             let mut compressed: Vec<u8> = Vec::with_capacity(x * y * 100);
             let encoder = crate::write::HCEncoder::new();
 
-            let res = encoder.write64(&mut input, y, x, scale, &mut compressed);
+            let _ = encoder.write64(&mut input, y, x, scale, &mut compressed);
 
             let mut uncompressed: Vec<i32> = vec![0; x * y * 2];
             let mut decoder = crate::read::HCDecoder::new();
-            let res = decoder.read64(&compressed, 0, cast_slice_mut(&mut uncompressed));
+            let _ = decoder.read64(&compressed, 0, cast_slice_mut(&mut uncompressed));
 
             if input_data == uncompressed[..(x*y)] {
                 return TestResult::passed();

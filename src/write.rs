@@ -278,11 +278,11 @@ fn htrans64(a: &mut [i64], nx: usize, ny: usize) -> Result<(), EncodeError> {
 
     // get temporary storage for shuffling elements
     let mut tmp: Vec<i64> = Vec::new();
-    if tmp.try_reserve_exact((nmax + 1) / 2).is_err() {
+    if tmp.try_reserve_exact(nmax.div_ceil(2)).is_err() {
         ffpmsg("htrans: insufficient memory");
         return Err(EncodeError::DataCompressionError);
     } else {
-        tmp.resize((nmax + 1) / 2, 0);
+        tmp.resize(nmax.div_ceil(2), 0);
     }
 
     // set up rounding and shifting masks
@@ -764,8 +764,8 @@ fn encode64(
     vmax.iter_mut().for_each(|x| *x = 0);
 
     // get maximum absolute value in each quadrant
-    let nx2 = (nx + 1) / 2;
-    let ny2 = (ny + 1) / 2;
+    let nx2 = nx.div_ceil(2);
+    let ny2 = ny.div_ceil(2);
     let mut j = 0; /* column counter	*/
     let mut k = 0; /* row counter		*/
     for i in 0..nel {
@@ -891,8 +891,8 @@ fn do_encode(
     ny: usize,
     nbitplanes: [u8; 3],
 ) -> Result<(), EncodeError> {
-    let nx2: usize = (nx + 1) / 2;
-    let ny2: usize = (ny + 1) / 2;
+    let nx2: usize = nx.div_ceil(2);
+    let ny2: usize = ny.div_ceil(2);
 
     // Initialize bit output
     let mut buffer2 = start_outputing_bits();
@@ -959,8 +959,8 @@ fn do_encode64(
     ny: usize,
     nbitplanes: [u8; 3],
 ) -> Result<(), EncodeError> {
-    let nx2: usize = (nx + 1) / 2;
-    let ny2: usize = (ny + 1) / 2;
+    let nx2: usize = nx.div_ceil(2);
+    let ny2: usize = ny.div_ceil(2);
 
     // Initialize bit output
     let mut buffer2 = start_outputing_bits();
@@ -1195,8 +1195,8 @@ fn qtree_encode(
     }
 
     // initialize buffer point, max buffer size
-    let nqx2: usize = (nqx + 1) / 2;
-    let nqy2: usize = (nqy + 1) / 2;
+    let nqx2: usize = nqx.div_ceil(2);
+    let nqy2: usize = nqy.div_ceil(2);
     let bmax: usize = (nqx2 * nqy2 + 2) / 2;
 
     /*
@@ -1339,8 +1339,8 @@ fn qtree_encode64(
     }
 
     // initialize buffer point, max buffer size
-    let nqx2: usize = (nqx + 1) / 2;
-    let nqy2: usize = (nqy + 1) / 2;
+    let nqx2: usize = nqx.div_ceil(2);
+    let nqy2: usize = nqy.div_ceil(2);
     let bmax: usize = (nqx2 * nqy2 + 2) / 2;
 
     /*
@@ -1784,7 +1784,7 @@ fn write_bdirect64(
     qtree_onebit64(a, n, nqx, nqy, scratch, bit);
 
     // write to outfile
-    output_nnybble(outfile, ((nqx + 1) / 2) * ((nqy + 1) / 2), scratch, buffer2);
+    output_nnybble(outfile, nqx.div_ceil(2) * nqy.div_ceil(2), scratch, buffer2);
 }
 
 #[cfg(test)]
