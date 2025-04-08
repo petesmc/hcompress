@@ -1746,6 +1746,7 @@ fn qtree_reduce(a: &mut [u8], n: usize, nx: usize, ny: usize) {
 }
 
 /* ######################################################################### */
+#[allow(clippy::too_many_arguments)]
 fn write_bdirect(
     outfile: &mut Vec<u8>,
     a: &[i32],
@@ -1767,6 +1768,7 @@ fn write_bdirect(
 }
 
 /* ######################################################################### */
+#[allow(clippy::too_many_arguments)]
 fn write_bdirect64(
     outfile: &mut Vec<u8>,
     a: &[i64],
@@ -1991,6 +1993,8 @@ mod tests {
 
     // ORIGINAL LIBRARY fails to encode and then decode this input
     // The compression will work, but there is UB
+    // This was found via fuzzing
+    #[allow(dead_code)]
     fn test_fits_compress_strange_input7() {
         let mut input: [i32; 10] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 134217727];
         let mut output: Vec<u8> = Vec::with_capacity(200);

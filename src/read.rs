@@ -2224,6 +2224,7 @@ fn qtree_bitins64(a: &mut [u8], nx: usize, ny: usize, b: &mut [i64], n: usize, b
 }
 
 /*  ############################################################################  */
+#[allow(clippy::too_many_arguments)]
 fn read_bdirect(
     infile: &mut Cursor<&[u8]>,
     a: &mut [i32],
@@ -2242,6 +2243,7 @@ fn read_bdirect(
 }
 
 /*  ############################################################################  */
+#[allow(clippy::too_many_arguments)]
 fn read_bdirect64(
     infile: &mut Cursor<&[u8]>,
     a: &mut [i64],
