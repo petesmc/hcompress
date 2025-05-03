@@ -41,9 +41,9 @@ mod tests {
             }
 
             let mut compressed: Vec<u8> = Vec::with_capacity(x * y * 100);
-            let encoder = crate::write::HCEncoder::new();
+            let mut encoder = crate::write::HCEncoder::new(&mut compressed);
 
-            let _ = encoder.write(&mut input, y, x, scale, &mut compressed);
+            let _ = encoder.write(&mut input, y, x, scale);
 
             let mut uncompressed: Vec<i32> = vec![0; x * y];
             let mut decoder = crate::read::HCDecoder::new();
@@ -70,9 +70,9 @@ mod tests {
             }
 
             let mut compressed: Vec<u8> = Vec::with_capacity(x * y * 100);
-            let encoder = crate::write::HCEncoder::new();
+            let mut encoder = crate::write::HCEncoder::new(&mut compressed);
 
-            let _ = encoder.write64(&mut input, y, x, scale, &mut compressed);
+            let _ = encoder.write64(&mut input, y, x, scale);
 
             let mut uncompressed: Vec<i32> = vec![0; x * y * 2];
             let mut decoder = crate::read::HCDecoder::new();

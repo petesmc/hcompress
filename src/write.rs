@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use crate::CODE_MAGIC;
 
 fn ffpmsg(_m: &str) {}
@@ -15,17 +17,13 @@ pub enum EncodeError {
     DataCompressionError,
 }
 
-pub struct HCEncoder {}
-
-impl Default for HCEncoder {
-    fn default() -> Self {
-        Self::new()
-    }
+pub struct HCEncoder<W: Write> {
+    inner: W,
 }
 
-impl HCEncoder {
-    pub fn new() -> Self {
-        HCEncoder {}
+impl<W: Write> HCEncoder<W> {
+    pub fn new(buf: W) -> Self {
+        HCEncoder { inner: buf }
     }
 
     /* ---------------------------------------------------------------------- */
@@ -45,12 +43,11 @@ impl HCEncoder {
     ///
     /// NOTE: The input data i32 is a i16 number padded to a i32 number.
     pub fn write(
-        &self,
+        &mut self,
         a: &mut [i32],
         ny: usize,
         nx: usize,
         scale: i32,
-        output: &mut Vec<u8>,
     ) -> Result<(), EncodeError> {
         // H-transform
         htrans(a, nx, ny)?;
@@ -60,7 +57,7 @@ impl HCEncoder {
 
         // encode and write to output array
         // input value is the allocated size of the array
-        encode(output, a, nx, ny, scale)
+        encode(&mut self.inner, a, nx, ny, scale)
     }
 
     /* ---------------------------------------------------------------------- */
@@ -78,12 +75,11 @@ impl HCEncoder {
     /// the usual FITS notation.  ny is the fastest varying dimension, which is
     /// usually considered the X axis in the FITS image display
     pub fn write64(
-        &self,
+        &mut self,
         a: &mut [i64],
         ny: usize,
         nx: usize,
         scale: i32,
-        output: &mut Vec<u8>,
     ) -> Result<(), EncodeError> {
         // H-transform
         htrans64(a, nx, ny)?;
@@ -93,7 +89,7 @@ impl HCEncoder {
 
         // encode and write to output array
         // input value is the allocated size of the array
-        encode64(output, a, nx, ny, scale)
+        encode64(&mut self.inner, a, nx, ny, scale)
     }
 }
 
@@ -548,8 +544,8 @@ fn shuffle64(a: &mut [i64], n: usize, n2: usize, tmp: &mut [i64]) {
 /// * `ny` - size of H-transform array
 /// * `scale` - scale factor for digitization
 ///
-fn encode(
-    outfile: &mut Vec<u8>,
+fn encode<W: Write>(
+    mut outfile: W,
     a: &mut [i32],
     nx: usize,
     ny: usize,
@@ -561,16 +557,16 @@ fn encode(
     let nel = nx * ny;
 
     // write magic value
-    qwrite(outfile, &CODE_MAGIC, 2);
-    writeint(outfile, nx as i32); /* size of image */
-    writeint(outfile, ny as i32);
-    writeint(outfile, scale); /* scale factor for digitization */
+    qwrite(&mut outfile, &CODE_MAGIC, 2);
+    writeint(&mut outfile, nx as i32); /* size of image */
+    writeint(&mut outfile, ny as i32);
+    writeint(&mut outfile, scale); /* scale factor for digitization */
 
     /*
     write first value of A (sum of all pixels -- the only value
     which does not compress well)
      */
-    writelonglong(outfile, i64::from(a[0]));
+    writelonglong(&mut outfile, i64::from(a[0]));
 
     a[0] = 0;
 
@@ -656,16 +652,16 @@ fn encode(
     }
 
     // write nbitplanes
-    if qwrite(outfile, &nbitplanes, nbitplanes.len()) == 0 {
+    if qwrite(&mut outfile, &nbitplanes, nbitplanes.len()) == 0 {
         ffpmsg("encode: output buffer too small");
         return Err(EncodeError::DataCompressionError);
     }
 
     // write coded array
-    let stat = do_encode(outfile, a, nx, ny, nbitplanes);
+    let stat = do_encode(&mut outfile, a, nx, ny, nbitplanes);
 
     // write sign bits
-    if nsign > 0 && qwrite(outfile, &signbits, nsign) == 0 {
+    if nsign > 0 && qwrite(&mut outfile, &signbits, nsign) == 0 {
         ffpmsg("encode: output buffer too small");
         return Err(EncodeError::DataCompressionError);
     }
@@ -684,8 +680,8 @@ fn encode(
 /// * `ny` - size of H-transform array
 /// * `scale` - scale factor for digitization
 ///
-fn encode64(
-    outfile: &mut Vec<u8>,
+fn encode64<W: Write>(
+    mut outfile: W,
     a: &mut [i64],
     nx: usize,
     ny: usize,
@@ -697,16 +693,16 @@ fn encode64(
     let nel = nx * ny;
 
     // write magic value
-    qwrite(outfile, &CODE_MAGIC, 2);
-    writeint(outfile, nx as i32); /* size of image */
-    writeint(outfile, ny as i32);
-    writeint(outfile, scale); /* scale factor for digitization */
+    qwrite(&mut outfile, &CODE_MAGIC, 2);
+    writeint(&mut outfile, nx as i32); /* size of image */
+    writeint(&mut outfile, ny as i32);
+    writeint(&mut outfile, scale); /* scale factor for digitization */
 
     /*
     write first value of A (sum of all pixels -- the only value
     which does not compress well)
      */
-    writelonglong(outfile, a[0]);
+    writelonglong(&mut outfile, a[0]);
 
     a[0] = 0;
 
@@ -792,16 +788,16 @@ fn encode64(
     }
 
     // write nbitplanes
-    if qwrite(outfile, &nbitplanes, nbitplanes.len()) == 0 {
+    if qwrite(&mut outfile, &nbitplanes, nbitplanes.len()) == 0 {
         ffpmsg("encode64: output buffer too small");
         return Err(EncodeError::DataCompressionError);
     }
 
     // write coded array
-    let stat = do_encode64(outfile, a, nx, ny, nbitplanes);
+    let stat = do_encode64(&mut outfile, a, nx, ny, nbitplanes);
 
     // write sign bits
-    if nsign > 0 && qwrite(outfile, &signbits, nsign) == 0 {
+    if nsign > 0 && qwrite(&mut outfile, &signbits, nsign) == 0 {
         ffpmsg("encode64: output buffer too small");
         return Err(EncodeError::DataCompressionError);
     }
@@ -822,8 +818,8 @@ fn encode64(
 ///
 /// Number of bytes written (=n) if successful, <=0 if not
 ///
-fn qwrite(file: &mut Vec<u8>, buffer: &[u8], n: usize) -> usize {
-    file.extend_from_slice(&buffer[0..n]);
+fn qwrite<W: Write>(mut file: W, buffer: &[u8], n: usize) -> usize {
+    file.write_all(&buffer[0..n]);
 
     n
 }
@@ -837,7 +833,7 @@ fn qwrite(file: &mut Vec<u8>, buffer: &[u8], n: usize) -> usize {
 /// * `outfile` - Output data stream
 /// * `a` - Integer to write
 ///
-fn writeint(outfile: &mut Vec<u8>, a: i32) {
+fn writeint<W: Write>(outfile: W, a: i32) {
     let mut b: [u8; 4] = [0; 4];
     let mut a = a;
 
@@ -859,7 +855,7 @@ fn writeint(outfile: &mut Vec<u8>, a: i32) {
 /// * `outfile` - Output data stream
 /// * `a` - Integer to write
 ///
-fn writelonglong(outfile: &mut Vec<u8>, a: i64) {
+fn writelonglong<W: Write>(mut outfile: W, a: i64) {
     let mut a = a;
     let mut b: [u8; 8] = [0; 8];
 
@@ -869,7 +865,7 @@ fn writelonglong(outfile: &mut Vec<u8>, a: i64) {
     }
 
     for i in 0..8 {
-        qwrite(outfile, &b[i..], 1);
+        qwrite(&mut outfile, &b[i..], 1);
     }
 }
 
@@ -884,8 +880,8 @@ fn writelonglong(outfile: &mut Vec<u8>, a: i64) {
 /// * `nbitplanes` - Number of bit planes in quadrants
 ///
 /// Note: This version assumes that A is positive.
-fn do_encode(
-    outfile: &mut Vec<u8>,
+fn do_encode<W: Write>(
+    mut outfile: W,
     a: &[i32],
     nx: usize,
     ny: usize,
@@ -898,10 +894,18 @@ fn do_encode(
     let mut buffer2 = start_outputing_bits();
 
     //write out the bit planes for each quadrant
-    qtree_encode(outfile, a, ny, nx2, ny2, nbitplanes[0] as i32, &mut buffer2)?;
+    qtree_encode(
+        &mut outfile,
+        a,
+        ny,
+        nx2,
+        ny2,
+        nbitplanes[0] as i32,
+        &mut buffer2,
+    )?;
 
     qtree_encode(
-        outfile,
+        &mut outfile,
         &a[ny2..],
         ny,
         nx2,
@@ -911,7 +915,7 @@ fn do_encode(
     )?;
 
     qtree_encode(
-        outfile,
+        &mut outfile,
         &a[ny * nx2..],
         ny,
         nx / 2,
@@ -924,7 +928,7 @@ fn do_encode(
 
     if ny * nx2 + ny2 < a.len() {
         stat = qtree_encode(
-            outfile,
+            &mut outfile,
             &a[(ny * nx2 + ny2)..],
             ny,
             nx / 2,
@@ -935,8 +939,8 @@ fn do_encode(
     }
 
     // Add zero as an EOF symbol
-    output_nybble(outfile, 0, &mut buffer2);
-    done_outputing_bits(outfile, &mut buffer2);
+    output_nybble(&mut outfile, 0, &mut buffer2);
+    done_outputing_bits(&mut outfile, &mut buffer2);
 
     stat
 }
@@ -952,8 +956,8 @@ fn do_encode(
 /// * `nbitplanes` - Number of bit planes in quadrants
 ///
 /// Note: This version assumes that A is positive.
-fn do_encode64(
-    outfile: &mut Vec<u8>,
+fn do_encode64<W: Write>(
+    mut outfile: W,
     a: &[i64],
     nx: usize,
     ny: usize,
@@ -966,10 +970,18 @@ fn do_encode64(
     let mut buffer2 = start_outputing_bits();
 
     //write out the bit planes for each quadrant
-    qtree_encode64(outfile, a, ny, nx2, ny2, nbitplanes[0] as i32, &mut buffer2)?;
+    qtree_encode64(
+        &mut outfile,
+        a,
+        ny,
+        nx2,
+        ny2,
+        nbitplanes[0] as i32,
+        &mut buffer2,
+    )?;
 
     qtree_encode64(
-        outfile,
+        &mut outfile,
         &a[ny2..],
         ny,
         nx2,
@@ -979,7 +991,7 @@ fn do_encode64(
     )?;
 
     qtree_encode64(
-        outfile,
+        &mut outfile,
         &a[ny * nx2..],
         ny,
         nx / 2,
@@ -992,7 +1004,7 @@ fn do_encode64(
 
     if ny * nx2 + ny2 < a.len() {
         stat = qtree_encode64(
-            outfile,
+            &mut outfile,
             &a[(ny * nx2 + ny2)..],
             ny,
             nx / 2,
@@ -1003,8 +1015,8 @@ fn do_encode64(
     }
 
     // Add zero as an EOF symbol
-    output_nybble(outfile, 0, &mut buffer2);
-    done_outputing_bits(outfile, &mut buffer2);
+    output_nybble(&mut outfile, 0, &mut buffer2);
+    done_outputing_bits(&mut outfile, &mut buffer2);
 
     stat
 }
@@ -1040,7 +1052,7 @@ fn start_outputing_bits() -> Buffer2 {
 /// * `n` - Number of bits to write
 /// * `b2` - Buffer to write to
 ///
-fn output_nbits(outfile: &mut Vec<u8>, bits: i32, n: usize, b2: &mut Buffer2) {
+fn output_nbits<W: Write>(mut outfile: W, bits: i32, n: usize, b2: &mut Buffer2) {
     // AND mask for the right-most n bits
     let mask: [i32; 9] = [0, 1, 3, 7, 15, 31, 63, 127, 255];
 
@@ -1052,7 +1064,7 @@ fn output_nbits(outfile: &mut Vec<u8>, bits: i32, n: usize, b2: &mut Buffer2) {
         // buffer full, put out top 8 bits
 
         // ((lbitbuffer>>(-bits_to_go2)) & 0xff)
-        outfile.push((b2.buffer2 >> (-b2.bits_to_go2)) as u8);
+        outfile.write(&[(b2.buffer2 >> (-b2.bits_to_go2)) as u8]);
         b2.bits_to_go2 += 8;
     }
     b2.bitcount += n;
@@ -1067,7 +1079,7 @@ fn output_nbits(outfile: &mut Vec<u8>, bits: i32, n: usize, b2: &mut Buffer2) {
 /// * `bits` - Bits to write
 /// * `buffer` - Buffer to write to
 ///
-fn output_nybble(outfile: &mut Vec<u8>, bits: i32, buffer: &mut Buffer2) {
+fn output_nybble<W: Write>(outfile: W, bits: i32, buffer: &mut Buffer2) {
     output_nbits(outfile, bits, 4, buffer)
 }
 
@@ -1082,22 +1094,22 @@ fn output_nybble(outfile: &mut Vec<u8>, bits: i32, buffer: &mut Buffer2) {
 /// * `n` - Number of elements in array
 /// * `array` - Array of bits to write
 ///
-fn output_nnybble(outfile: &mut Vec<u8>, n: usize, array: &[u8], b2: &mut Buffer2) {
+fn output_nnybble<W: Write>(mut outfile: W, n: usize, array: &[u8], b2: &mut Buffer2) {
     let mut kk = 0;
 
     if n == 1 {
-        output_nybble(outfile, i32::from(array[0]), b2);
+        output_nybble(&mut outfile, i32::from(array[0]), b2);
         return;
     }
 
     if b2.bits_to_go2 <= 4 {
         // just room for 1 nybble; write it out separately
-        output_nybble(outfile, i32::from(array[0]), b2);
+        output_nybble(&mut outfile, i32::from(array[0]), b2);
         kk += 1; /* index to next array element */
 
         if n == 2 {
             // only 1 more nybble to write out
-            output_nybble(outfile, i32::from(array[1]), b2);
+            output_nybble(&mut outfile, i32::from(array[1]), b2);
             return;
         }
     }
@@ -1113,7 +1125,7 @@ fn output_nnybble(outfile: &mut Vec<u8>, n: usize, array: &[u8], b2: &mut Buffer
         // this actually seems to make very little difference in speed
         b2.buffer2 = 0;
         for _ii in 0..jj {
-            outfile.push(((array[kk] & 15) << 4) | (array[kk + 1] & 15));
+            outfile.write(&[((array[kk] & 15) << 4) | (array[kk + 1] & 15)]);
             kk += 2;
         }
     } else {
@@ -1124,7 +1136,7 @@ fn output_nnybble(outfile: &mut Vec<u8>, n: usize, array: &[u8], b2: &mut Buffer
 
             // buffer2 full, put out top 8 bits
 
-            outfile.push(((b2.buffer2 >> shift) & 0xff) as u8);
+            outfile.write(&[((b2.buffer2 >> shift) & 0xff) as u8]);
         }
     }
 
@@ -1143,9 +1155,9 @@ fn output_nnybble(outfile: &mut Vec<u8>, n: usize, array: &[u8], b2: &mut Buffer
 ///
 /// * `outfile` - Output data stream
 /// * `buffer` - Buffer to write to
-fn done_outputing_bits(outfile: &mut Vec<u8>, buffer: &mut Buffer2) {
+fn done_outputing_bits<W: Write>(mut outfile: W, buffer: &mut Buffer2) {
     if buffer.bits_to_go2 < 8 {
-        outfile.push((buffer.buffer2 << buffer.bits_to_go2) as u8);
+        outfile.write(&[(buffer.buffer2 << buffer.bits_to_go2) as u8]);
 
         // count the garbage bits too
         buffer.bitcount += buffer.bits_to_go2 as usize;
@@ -1166,8 +1178,8 @@ fn done_outputing_bits(outfile: &mut Vec<u8>, buffer: &mut Buffer2) {
 /// * `nbitplanes` - Number of bit planes to encode
 /// * `buffer2` - Buffer to write to
 ///
-fn qtree_encode(
-    outfile: &mut Vec<u8>,
+fn qtree_encode<W: Write>(
+    mut outfile: W,
     a: &[i32],
     n: usize,
     nqx: usize,
@@ -1237,7 +1249,7 @@ fn qtree_encode(
         // copy non-zero values to output buffer, which will be written in reverse order
         if bufcopy(&scratch, nx * ny, &mut buffer, &mut b, bmax, &mut b3) {
             //quadtree is expanding data, change warning code and just fill buffer with bit-map
-            write_bdirect(outfile, a, n, nqx, nqy, &mut scratch, bit, buffer2);
+            write_bdirect(&mut outfile, a, n, nqx, nqy, &mut scratch, bit, buffer2);
             continue;
         }
 
@@ -1249,7 +1261,7 @@ fn qtree_encode(
             ny = (ny + 1) >> 1;
             if bufcopy(&scratch, nx * ny, &mut buffer, &mut b, bmax, &mut b3) {
                 // nx=1, ny=1, b=1??, scratch=[10,8,0,0], bmax=2, b3=0/1
-                write_bdirect(outfile, a, n, nqx, nqy, &mut scratch, bit, buffer2);
+                write_bdirect(&mut outfile, a, n, nqx, nqy, &mut scratch, bit, buffer2);
                 is_continue = true;
                 break; // Break this loop and continue with next
             }
@@ -1261,27 +1273,27 @@ fn qtree_encode(
 
         // OK, we've got the code in buffer
         // Write quadtree warning code, then write buffer in reverse order
-        output_nybble(outfile, 0xF, buffer2);
+        output_nybble(&mut outfile, 0xF, buffer2);
 
         if b == 0 {
             if b3.bits_to_go > 0 {
                 // put out the last few bits
                 output_nbits(
-                    outfile,
+                    &mut outfile,
                     b3.bitbuffer & ((1 << b3.bits_to_go) - 1),
                     b3.bits_to_go as usize,
                     buffer2,
                 );
             } else {
                 // have to write a zero nybble if there are no 1's in array
-                output_nbits(outfile, CODE[0], NCODE[0] as usize, buffer2);
+                output_nbits(&mut outfile, CODE[0], NCODE[0] as usize, buffer2);
             }
         } else {
             if b3.bits_to_go > 0 {
                 // put out the last few bits
 
                 output_nbits(
-                    outfile,
+                    &mut outfile,
                     b3.bitbuffer & ((1 << b3.bits_to_go) - 1),
                     b3.bits_to_go as usize,
                     buffer2,
@@ -1290,7 +1302,7 @@ fn qtree_encode(
 
             // write in blocks of 24 bits to speed things up
             for i in (0..b).rev() {
-                output_nbits(outfile, i32::from(buffer[i]), 8, buffer2);
+                output_nbits(&mut outfile, i32::from(buffer[i]), 8, buffer2);
             }
         }
     }
@@ -1311,8 +1323,8 @@ fn qtree_encode(
 /// * `nbitplanes` - Number of bit planes to encode
 /// * `buffer2` - Buffer to write to
 ///
-fn qtree_encode64(
-    outfile: &mut Vec<u8>,
+fn qtree_encode64<W: Write>(
+    mut outfile: W,
     a: &[i64],
     n: usize,
     nqx: usize,
@@ -1381,7 +1393,7 @@ fn qtree_encode64(
         // copy non-zero values to output buffer, which will be written in reverse order
         if bufcopy(&scratch, nx * ny, &mut buffer, &mut b, bmax, &mut b3) {
             //quadtree is expanding data, change warning code and just fill buffer with bit-map
-            write_bdirect64(outfile, a, n, nqx, nqy, &mut scratch, bit, buffer2);
+            write_bdirect64(&mut outfile, a, n, nqx, nqy, &mut scratch, bit, buffer2);
             continue;
         }
 
@@ -1393,7 +1405,7 @@ fn qtree_encode64(
             ny = (ny + 1) >> 1;
             if bufcopy(&scratch, nx * ny, &mut buffer, &mut b, bmax, &mut b3) {
                 // nx=1, ny=1, b=1??, scratch=[10,8,0,0], bmax=2, b3=0/1
-                write_bdirect64(outfile, a, n, nqx, nqy, &mut scratch, bit, buffer2);
+                write_bdirect64(&mut outfile, a, n, nqx, nqy, &mut scratch, bit, buffer2);
                 is_continue = true;
                 break; // Break this loop and continue with next
             }
@@ -1405,27 +1417,27 @@ fn qtree_encode64(
 
         // OK, we've got the code in buffer
         // Write quadtree warning code, then write buffer in reverse order
-        output_nybble(outfile, 0xF, buffer2);
+        output_nybble(&mut outfile, 0xF, buffer2);
 
         if b == 0 {
             if b3.bits_to_go > 0 {
                 // put out the last few bits
                 output_nbits(
-                    outfile,
+                    &mut outfile,
                     b3.bitbuffer & ((1 << b3.bits_to_go) - 1),
                     b3.bits_to_go as usize,
                     buffer2,
                 );
             } else {
                 // have to write a zero nybble if there are no 1's in array
-                output_nbits(outfile, CODE[0], NCODE[0] as usize, buffer2);
+                output_nbits(&mut outfile, CODE[0], NCODE[0] as usize, buffer2);
             }
         } else {
             if b3.bits_to_go > 0 {
                 // put out the last few bits
 
                 output_nbits(
-                    outfile,
+                    &mut outfile,
                     b3.bitbuffer & ((1 << b3.bits_to_go) - 1),
                     b3.bits_to_go as usize,
                     buffer2,
@@ -1434,7 +1446,7 @@ fn qtree_encode64(
 
             // write in blocks of 24 bits to speed things up
             for i in (0..b).rev() {
-                output_nbits(outfile, i32::from(buffer[i]), 8, buffer2);
+                output_nbits(&mut outfile, i32::from(buffer[i]), 8, buffer2);
             }
         }
     }
@@ -1747,8 +1759,8 @@ fn qtree_reduce(a: &mut [u8], n: usize, nx: usize, ny: usize) {
 
 /* ######################################################################### */
 #[allow(clippy::too_many_arguments)]
-fn write_bdirect(
-    outfile: &mut Vec<u8>,
+fn write_bdirect<W: Write>(
+    mut outfile: W,
     a: &[i32],
     n: usize,
     nqx: usize,
@@ -1758,19 +1770,24 @@ fn write_bdirect(
     buffer2: &mut Buffer2,
 ) {
     // Write the direct bitmap warning code
-    output_nybble(outfile, 0, buffer2);
+    output_nybble(&mut outfile, 0, buffer2);
 
     // Copy A to scratch array (again!), packing 4 bits/nybble
     qtree_onebit(a, n, nqx, nqy, scratch, bit);
 
     // write to outfile
-    output_nnybble(outfile, nqx.div_ceil(2) * nqy.div_ceil(2), scratch, buffer2);
+    output_nnybble(
+        &mut outfile,
+        nqx.div_ceil(2) * nqy.div_ceil(2),
+        scratch,
+        buffer2,
+    );
 }
 
 /* ######################################################################### */
 #[allow(clippy::too_many_arguments)]
-fn write_bdirect64(
-    outfile: &mut Vec<u8>,
+fn write_bdirect64<W: Write>(
+    mut outfile: W,
     a: &[i64],
     n: usize,
     nqx: usize,
@@ -1780,13 +1797,18 @@ fn write_bdirect64(
     buffer2: &mut Buffer2,
 ) {
     // Write the direct bitmap warning code
-    output_nybble(outfile, 0, buffer2);
+    output_nybble(&mut outfile, 0, buffer2);
 
     // Copy A to scratch array (again!), packing 4 bits/nybble
     qtree_onebit64(a, n, nqx, nqy, scratch, bit);
 
     // write to outfile
-    output_nnybble(outfile, nqx.div_ceil(2) * nqy.div_ceil(2), scratch, buffer2);
+    output_nnybble(
+        &mut outfile,
+        nqx.div_ceil(2) * nqy.div_ceil(2),
+        scratch,
+        buffer2,
+    );
 }
 
 #[cfg(test)]
@@ -1818,8 +1840,8 @@ mod tests {
         let mut input: [i32; 16] = [2, 2, 1, 2, 3, 2, 7, 7, 4, 2, 2, 1, 2, 4, 25, 2];
         let mut output: Vec<u8> = Vec::with_capacity(16);
 
-        let encoder = HCEncoder::new();
-        let _res = encoder.write(&mut input, 4, 4, 0, &mut output);
+        let mut encoder = HCEncoder::new(&mut output);
+        let _res = encoder.write(&mut input, 4, 4, 0);
 
         assert_eq!(output.len(), 48);
         assert_eq!(
@@ -1842,9 +1864,9 @@ mod tests {
         let mut input: [i32; 10] = [-1, -1, -112, -1, 9983, -28528, -112, -1, -1, -1];
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
-        let encoder = HCEncoder::new();
-        let _res = encoder.write(&mut input, 1, 10, 0, &mut output);
-        println!("{:#?}", output);
+        let mut encoder = HCEncoder::new(&mut output);
+        let _res = encoder.write(&mut input, 1, 10, 0);
+        println!("{output:#?}");
         assert_eq!(output.len(), 101);
 
         assert_eq!(
@@ -1867,8 +1889,8 @@ mod tests {
         ];
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
-        let encoder = HCEncoder::new();
-        let _res = encoder.write(&mut input, 1, 12, 0, &mut output);
+        let mut encoder = HCEncoder::new(&mut output);
+        let _res = encoder.write(&mut input, 1, 12, 0);
 
         assert_eq!(output.len(), 106);
 
@@ -1893,8 +1915,8 @@ mod tests {
         ];
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
-        let encoder = HCEncoder::new();
-        let _res = encoder.write(&mut input, 1, 16, 0, &mut output);
+        let mut encoder = HCEncoder::new(&mut output);
+        let _res = encoder.write(&mut input, 1, 16, 0);
 
         assert_eq!(output.len(), 140);
 
@@ -1923,8 +1945,8 @@ mod tests {
         ];
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
-        let encoder = HCEncoder::new();
-        let _res = encoder.write(&mut input, 1, 82, 0, &mut output);
+        let mut encoder = HCEncoder::new(&mut output);
+        let _res = encoder.write(&mut input, 1, 82, 0);
 
         assert_eq!(output.len(), 154);
 
@@ -1949,8 +1971,8 @@ mod tests {
         let mut input: [i32; 10] = [61, 14, 0, 0, 0, -23641, -13558, -28528, -28526, -28528];
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
-        let encoder = HCEncoder::new();
-        let _res = encoder.write(&mut input, 10, 1, 0, &mut output);
+        let mut encoder = HCEncoder::new(&mut output);
+        let _res = encoder.write(&mut input, 10, 1, 0);
 
         assert_eq!(output.len(), 104);
 
@@ -1974,8 +1996,8 @@ mod tests {
         ];
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
-        let encoder = HCEncoder::new();
-        let _res = encoder.write(&mut input, 10, 1, 0, &mut output);
+        let mut encoder = HCEncoder::new(&mut output);
+        let _res = encoder.write(&mut input, 10, 1, 0);
 
         assert_eq!(output.len(), 84);
 
@@ -1999,8 +2021,8 @@ mod tests {
         let mut input: [i32; 10] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 134217727];
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
-        let encoder = HCEncoder::new();
-        let _res = encoder.write(&mut input, 1, 10, 0, &mut output);
+        let mut encoder = HCEncoder::new(&mut output);
+        let _res = encoder.write(&mut input, 1, 10, 0);
 
         assert_eq!(output.len(), 146);
 
@@ -2025,8 +2047,8 @@ mod tests {
         let mut input: [i64; 2] = [0, 1];
         let mut output: Vec<u8> = Vec::with_capacity(200);
 
-        let encoder = HCEncoder::new();
-        let _res = encoder.write64(&mut input, 1, 2, 0, &mut output);
+        let mut encoder = HCEncoder::new(&mut output);
+        let _res = encoder.write64(&mut input, 1, 2, 0);
 
         assert_eq!(output.len(), 32);
 
